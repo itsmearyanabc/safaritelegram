@@ -1,0 +1,107 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+model User {
+  id               String    @id @default(uuid())
+  username         String    @unique
+  passwordHash     String
+  telegramUsername String?
+  telegramId       String?   @unique
+  role             String    @default("CUSTOMER") // CUSTOMER, STAFF, ADMIN, SUPERADMIN
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  wallet           Wallet?
+  orders           Order[]
+  disputes         Dispute[]
+}
+
+model Wallet {
+  id        String         @id @default(uuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Float          @default(0.0)
+  updatedAt DateTime       @updatedAt
+  ledgers   WalletLedger[]
+}
+
+model WalletLedger {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type        String   // DEPOSIT, PURCHASE, REFUND, CREDIT
+  amount      Float
+  description String
+  createdAt   DateTime @default(now())
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+}
+
+model Product {
+  id          String          @id @default(uuid())
+  categoryId  String
+  category    Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String          @unique
+  description String?
+  price       Float
+  formula     String?         // Chemical formula (e.g. NaCl, H2SO4)
+  casNumber   String?         // CAS Registry Number for chemicals
+  stockState  String          @default("OUT_OF_STOCK") // IN_STOCK, LOW_STOCK, CRITICAL_STOCK, OUT_OF_STOCK
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  items       InventoryItem[]
+  orders      Order[]
+}
+
+model InventoryItem {
+  id           String    @id @default(uuid())
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  data         String    // Batch key, lab locker code, serial, or pickup instructions
+  mediaUrl     String?   // URL to image or diagram
+  locationData String?   // Coordinates or lab bench pickup location details
+  isAllocated  Boolean   @default(false)
+  allocatedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  orders       Order[]
+}
+
+model Order {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  amountPaid      Float
+  status          String         @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAYMENT_CONFIRMING, PAID, COOLDOWN_ACTIVE, READY, COMPLETED, REFUNDED, FAILED
+  cooldownEndAt   DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  disputes        Dispute[]
+}
+
+model Dispute {
+  id             String    @id @default(uuid())
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason         String
+  status         String    @default("OPEN") // OPEN, INVESTIGATING, RESOLVED
+  resolutionType String?   // REFUND, CREDIT, REPLACEMENT, REJECTED
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
