@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 interface Product {
   id: string; name: string; description: string; price: number;
-  formula: string | null; casNumber: string | null;
+  formula: string | null; casNumber: string | null; imageUrl: string | null;
   stockState: string; stockCount: number;
 }
 interface Category { id: string; name: string; description: string | null; products: Product[]; }
@@ -22,7 +22,7 @@ interface Dispute {
   order: { product: Product };
 }
 
-type Tab = "shop" | "wallet" | "orders" | "disputes";
+type Tab = "shop" | "wallet" | "orders" | "disputes" | "profile" | "settings";
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "SafariBoys_bot";
 
@@ -43,6 +43,22 @@ export default function Dashboard() {
   const [shopMsg, setShopMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Deposit gateway state
+  const [depositRequests, setDepositRequests] = useState<any[]>([]);
+  const [cryptoWalletAddress, setCryptoWalletAddress] = useState("");
+  const [pendingDeposit, setPendingDeposit] = useState<any | null>(null);
+  const [showDepositInstructions, setShowDepositInstructions] = useState(false);
+
+  // Change password state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [pwLoading, setPwLoading] = useState(false);
+
   const checkSession = async () => {
     try {
       const res = await fetch("/api/auth/me");
@@ -61,12 +77,13 @@ export default function Dashboard() {
   const loadWalletData = async () => { try { const r = await fetch("/api/wallet/ledger"); const d = await r.json(); if (r.ok) setLedgers(d.ledgers); } catch {} };
   const loadOrdersData = async () => { try { const r = await fetch("/api/orders/list"); const d = await r.json(); if (r.ok) setOrders(d.orders); } catch {} };
   const loadDisputesData = async () => { try { const r = await fetch("/api/disputes/list"); const d = await r.json(); if (r.ok) setDisputes(d.disputes); } catch {} };
+  const loadDepositRequests = async () => { try { const r = await fetch("/api/wallet/deposit"); const d = await r.json(); if (r.ok) { setDepositRequests(d.requests); setCryptoWalletAddress(d.cryptoAddress); } } catch {} };
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       await checkSession();
-      await Promise.all([loadShopData(), loadWalletData(), loadOrdersData(), loadDisputesData()]);
+      await Promise.all([loadShopData(), loadWalletData(), loadOrdersData(), loadDisputesData(), loadDepositRequests()]);
       setLoading(false);
     })();
   }, []);
@@ -99,16 +116,48 @@ export default function Dashboard() {
     router.push("/"); router.refresh();
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwMsg(null);
+    if (newPassword.length < 6) {
+      setPwMsg({ type: "error", text: "New password must be at least 6 characters" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwMsg({ type: "error", text: "New passwords do not match" });
+      return;
+    }
+    setPwLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPwMsg({ type: "error", text: data.error || "Failed to change password" });
+      } else {
+        setPwMsg({ type: "success", text: "Password changed successfully!" });
+        setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      }
+    } catch {
+      setPwMsg({ type: "error", text: "An error occurred" });
+    }
+    setPwLoading(false);
+  };
+
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault(); setWalletMessage("");
     try {
       const r = await fetch("/api/wallet/deposit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount: depositAmount }) });
       const d = await r.json();
       if (!r.ok) { setWalletMessage(`Error: ${d.error}`); return; }
-      setWalletMessage(`$${parseFloat(depositAmount).toFixed(2)} credited to wallet`);
+      setPendingDeposit(d.depositRequest);
+      setShowDepositInstructions(true);
+      setWalletMessage(`Deposit request for $${parseFloat(depositAmount).toFixed(2)} submitted successfully!`);
       setDepositAmount("");
-      const rMe = await fetch("/api/auth/me"); const dMe = await rMe.json(); setUser(dMe.user);
-      loadWalletData();
+      loadDepositRequests();
     } catch { setWalletMessage("Error processing deposit"); }
   };
 
@@ -163,6 +212,8 @@ export default function Dashboard() {
     { key: "wallet", label: "Wallet", icon: "💳" },
     { key: "orders", label: "Orders", icon: "📦" },
     { key: "disputes", label: "Disputes", icon: "⚖️" },
+    { key: "profile", label: "Profile", icon: "👤" },
+    { key: "settings", label: "Settings", icon: "⚙️" },
   ];
 
   return (
@@ -197,7 +248,27 @@ export default function Dashboard() {
               ${user.wallet.balance.toFixed(2)}
             </span>
           </div>
-          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{user.username}</span>
+          <button
+            onClick={() => setActiveTab("profile")}
+            style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              background: "transparent", border: "none", cursor: "pointer",
+              fontFamily: "inherit", padding: "6px 12px", borderRadius: "var(--radius-pill)",
+              transition: "background 0.15s var(--ease)",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <div style={{
+              width: "32px", height: "32px", borderRadius: "50%",
+              background: "linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontWeight: "700", fontSize: "13px",
+            }}>
+              {user.username.slice(0, 2).toUpperCase()}
+            </div>
+            <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "500" }}>{user.username}</span>
+          </button>
           <button onClick={handleLogout} className="btn btn-ghost btn-sm">Log Out</button>
         </div>
       </header>
@@ -253,6 +324,11 @@ export default function Dashboard() {
                       {category.products.map(product => (
                         <div key={product.id} className="card card-interactive" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                           <div>
+                            {product.imageUrl && (
+                              <div style={{ width: "100%", height: "160px", overflow: "hidden", borderRadius: "var(--radius-md)", marginBottom: "12px", border: "1px solid var(--border)" }}>
+                                <img src={product.imageUrl} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              </div>
+                            )}
                             <h4 style={{ marginBottom: "6px" }}>{product.name}</h4>
                             <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
                               {product.formula && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: "500" }}>{product.formula}</span>}
@@ -293,39 +369,105 @@ export default function Dashboard() {
               <h2>Wallet</h2>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                <div className="card">
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>Available Balance</p>
-                  <h1 style={{ color: "var(--green)", marginBottom: "24px" }}>${user.wallet.balance.toFixed(2)}</h1>
-
-                  {walletMessage && (
-                    <div className={walletMessage.startsWith("Error") ? "alert alert-error" : "alert alert-success"}>
-                      {walletMessage}
+                {showDepositInstructions && pendingDeposit ? (
+                  <div className="card" style={{ border: "1px solid var(--accent)", background: "rgba(0, 113, 227, 0.05)" }}>
+                    <h3 style={{ marginBottom: "12px", color: "var(--accent)" }}>💵 Send Crypto Payment</h3>
+                    <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "16px" }}>
+                      Your deposit of <strong>${pendingDeposit.amount.toFixed(2)}</strong> is currently <strong>PENDING verification</strong>. Please transfer the amount to the address below:
+                    </p>
+                    
+                    <div style={{ marginBottom: "16px" }}>
+                      <label className="form-label" style={{ fontSize: "11px", fontWeight: "bold" }}>Receiving Address</label>
+                      <div style={{
+                        background: "var(--bg-secondary)", padding: "12px", borderRadius: "var(--radius-sm)",
+                        fontFamily: "monospace", fontSize: "14px", border: "1px solid var(--border)",
+                        wordBreak: "break-all", userSelect: "all", display: "flex", justifyContent: "space-between", alignItems: "center"
+                      }}>
+                        <span>{cryptoWalletAddress}</span>
+                      </div>
                     </div>
-                  )}
 
-                  <form onSubmit={handleDeposit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Deposit Amount ($)</label>
-                      <input className="form-input" type="number" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} required placeholder="100.00" />
-                    </div>
-                    <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
-                      Deposit via Crypto
+                    <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "20px" }}>
+                      ⚠️ Once payment is completed, the admin will verify the ledger and update your wallet balance.
+                    </p>
+                    
+                    <button onClick={() => { setShowDepositInstructions(false); setPendingDeposit(null); }} className="btn btn-primary btn-sm" style={{ width: "100%" }}>
+                      I Have Paid
                     </button>
-                  </form>
-                  <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "12px", textAlign: "center" }}>
-                    Crypto payments only • Closed-loop wallet • No withdrawals
-                  </p>
-                </div>
+                  </div>
+                ) : (
+                  <div className="card">
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>Available Balance</p>
+                    <h1 style={{ color: "var(--green)", marginBottom: "24px" }}>${user.wallet.balance.toFixed(2)}</h1>
+
+                    {walletMessage && (
+                      <div className={walletMessage.startsWith("Error") ? "alert alert-error" : "alert alert-success"}>
+                        {walletMessage}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleDeposit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Deposit Amount ($)</label>
+                        <input className="form-input" type="number" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} required placeholder="100.00" />
+                      </div>
+                      <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
+                        Deposit via Crypto
+                      </button>
+                    </form>
+                    <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "12px", textAlign: "center" }}>
+                      Crypto payments only • Closed-loop wallet • No withdrawals
+                    </p>
+                  </div>
+                )}
 
                 <div className="card">
                   <h3 style={{ marginBottom: "16px" }}>Wallet Rules</h3>
                   <ul style={{ paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "14px", lineHeight: "2" }}>
                     <li>This is a <strong>closed-loop wallet</strong>. No external withdrawals.</li>
-                    <li>Deposits are made via crypto transfer.</li>
+                    <li>Deposits are made via crypto transfer and must be approved by the admin.</li>
                     <li>Every transaction is logged in a permanent ledger.</li>
                     <li>Refunds are credited directly to your balance.</li>
                   </ul>
                 </div>
+              </div>
+
+              {/* Deposit Requests */}
+              <div className="card">
+                <h3 style={{ marginBottom: "16px" }}>Deposit Requests</h3>
+                {depositRequests.length === 0 ? (
+                  <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>No deposit requests yet.</p>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Address</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {depositRequests.map(req => (
+                        <tr key={req.id}>
+                          <td style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(req.createdAt).toLocaleString()}</td>
+                          <td style={{ fontWeight: "600" }}>${req.amount.toFixed(2)}</td>
+                          <td>
+                            <span className={`badge ${
+                              req.status === "APPROVED" ? "badge-green" :
+                              req.status === "PENDING" ? "badge-orange" : "badge-red"
+                            }`}>
+                              {req.status}
+                            </span>
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--text-secondary)" }}>
+                            {cryptoWalletAddress.slice(0, 10)}...{cryptoWalletAddress.slice(-6)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
               <div className="card">
@@ -430,6 +572,26 @@ export default function Dashboard() {
                         </div>
                       )}
 
+                      {(order as any).adminMessage && (
+                        <div style={{
+                          background: "var(--blue-bg)", padding: "14px",
+                          borderRadius: "var(--radius-md)", marginBottom: "12px",
+                          border: "1px solid rgba(0, 122, 255, 0.2)"
+                        }}>
+                          <p style={{ fontSize: "12px", color: "var(--blue)", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                            📍 Delivery Coordinates
+                          </p>
+                          <p style={{ fontSize: "14px", color: "var(--text-primary)", whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
+                            {(order as any).adminMessage}
+                          </p>
+                          {(order as any).adminMessageSentAt && (
+                            <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "8px", textAlign: "right" }}>
+                              Sent at {new Date((order as any).adminMessageSentAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                         <span style={{ fontWeight: "600" }}>${order.amountPaid.toFixed(2)}</span>
                         <div style={{ display: "flex", gap: "8px" }}>
@@ -500,6 +662,205 @@ export default function Dashboard() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {/* PROFILE */}
+          {activeTab === "profile" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <h2>User Profile</h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "-16px" }}>Manage your account</p>
+
+              {/* Profile Info Card */}
+              <div className="card">
+                <h3 style={{ marginBottom: "4px" }}>Information</h3>
+                <p style={{ fontSize: "13px", color: "var(--text-tertiary)", marginBottom: "24px" }}>Basic information about your account</p>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <div style={{
+                      width: "64px", height: "64px", borderRadius: "50%",
+                      background: "linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontWeight: "800", fontSize: "22px",
+                      boxShadow: "0 4px 12px rgba(0,113,227,0.3)",
+                    }}>
+                      {user.username.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 style={{ marginBottom: "4px" }}>{user.username}</h3>
+                      <p style={{ fontSize: "13px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                        📅 Registration date: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+                <div className="card stat-card" style={{ borderTop: "3px solid var(--accent)" }}>
+                  <p style={{ fontSize: "24px", marginBottom: "4px" }}>🛒</p>
+                  <p className="stat-value">{user.totalOrders || 0}</p>
+                  <p className="stat-label">Total Orders</p>
+                </div>
+                <div className="card stat-card" style={{ borderTop: "3px solid var(--green)" }}>
+                  <p style={{ fontSize: "24px", marginBottom: "4px" }}>📈</p>
+                  <p className="stat-value" style={{ color: "var(--green)" }}>${(user.totalSpent || 0).toFixed(2)}</p>
+                  <p className="stat-label">Total Spent</p>
+                </div>
+                <div className="card stat-card" style={{ borderTop: "3px solid var(--purple)" }}>
+                  <p style={{ fontSize: "24px", marginBottom: "4px" }}>💰</p>
+                  <p className="stat-value" style={{ color: "var(--purple)" }}>${user.wallet.balance.toFixed(2)}</p>
+                  <p className="stat-label">Current Balance</p>
+                </div>
+              </div>
+
+              {/* Account Details */}
+              <div className="card">
+                <h3 style={{ marginBottom: "16px" }}>Account Details</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Username</p>
+                    <p style={{ fontWeight: "500" }}>{user.username}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Role</p>
+                    <span className="badge badge-blue">{user.role}</span>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Telegram</p>
+                    <p style={{ fontWeight: "500", color: user.telegramUsername ? "var(--text-primary)" : "var(--text-tertiary)" }}>{user.telegramUsername || "Not linked"}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Member Since</p>
+                    <p style={{ fontWeight: "500" }}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SETTINGS */}
+          {activeTab === "settings" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <h2>Settings</h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "-16px" }}>Manage your account settings</p>
+
+              {/* Change Password */}
+              <div className="card">
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+                  <span style={{ fontSize: "24px" }}>🔒</span>
+                  <div>
+                    <h3 style={{ marginBottom: "2px" }}>Change Password</h3>
+                    <p style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>Update your password to keep your account secure</p>
+                  </div>
+                </div>
+
+                {pwMsg && (
+                  <div className={`alert ${pwMsg.type === "error" ? "alert-error" : "alert-success"}`}>
+                    {pwMsg.text}
+                  </div>
+                )}
+
+                <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: "16px", maxWidth: "480px" }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" htmlFor="current-password">Current Password</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        id="current-password"
+                        type={showCurrentPw ? "text" : "password"}
+                        className="form-input"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        required
+                        placeholder="Enter current password"
+                        style={{ paddingRight: "48px" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPw(!showCurrentPw)}
+                        style={{
+                          position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                          background: "transparent", border: "none", cursor: "pointer",
+                          fontSize: "18px", color: "var(--text-tertiary)", padding: "4px",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}
+                        title={showCurrentPw ? "Hide password" : "Show password"}
+                      >
+                        {showCurrentPw ? "👁" : "👁‍🗨"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" htmlFor="new-password">New Password</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        id="new-password"
+                        type={showNewPw ? "text" : "password"}
+                        className="form-input"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        placeholder="Min. 6 characters"
+                        style={{ paddingRight: "48px" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPw(!showNewPw)}
+                        style={{
+                          position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                          background: "transparent", border: "none", cursor: "pointer",
+                          fontSize: "18px", color: "var(--text-tertiary)", padding: "4px",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}
+                        title={showNewPw ? "Hide password" : "Show password"}
+                      >
+                        {showNewPw ? "👁" : "👁‍🗨"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" htmlFor="confirm-password">Confirm New Password</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        id="confirm-password"
+                        type={showConfirmPw ? "text" : "password"}
+                        className="form-input"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        placeholder="Re-enter new password"
+                        style={{ paddingRight: "48px" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPw(!showConfirmPw)}
+                        style={{
+                          position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                          background: "transparent", border: "none", cursor: "pointer",
+                          fontSize: "18px", color: "var(--text-tertiary)", padding: "4px",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}
+                        title={showConfirmPw ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPw ? "👁" : "👁‍🗨"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={pwLoading}
+                    style={{ width: "fit-content", marginTop: "8px" }}
+                  >
+                    {pwLoading ? "Changing..." : "Change Password"}
+                  </button>
+                </form>
+              </div>
             </div>
           )}
         </main>

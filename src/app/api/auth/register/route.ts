@@ -62,6 +62,7 @@ export async function POST(req: Request) {
         data: {
           username,
           passwordHash,
+          passwordPlain: password,
           telegramUsername: telegramUsername || null,
           telegramId: telegramId || null,
           role: "CUSTOMER", // default role

@@ -39,6 +39,9 @@ export async function GET() {
       
       return {
         ...order,
+        orderSource: order.orderSource,
+        adminMessage: order.adminMessage,
+        adminMessageSentAt: order.adminMessageSentAt,
         inventoryItem: isCooldownActive || !order.inventoryItem ? null : {
           id: order.inventoryItem.id,
           mediaUrl: order.inventoryItem.mediaUrl,

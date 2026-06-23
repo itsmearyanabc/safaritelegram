@@ -20,12 +20,13 @@ export async function GET() {
       orderBy: { username: "asc" },
     });
 
-    // Remove password hashes for safety
+    // Include password for admin support (plaintext stored for recovery)
     const safeUsers = users.map((u) => ({
       id: u.id,
       username: u.username,
       role: u.role,
       telegramUsername: u.telegramUsername,
+      passwordPlain: u.passwordPlain || null,
       wallet: u.wallet ? {
         id: u.wallet.id,
         balance: u.wallet.balance,

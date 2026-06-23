@@ -13,12 +13,21 @@ export async function GET() {
       where: { id: session.userId },
       include: {
         wallet: true,
+        orders: {
+          select: {
+            amountPaid: true,
+            status: true,
+          },
+        },
       },
     });
 
     if (!user) {
       return NextResponse.json({ user: null });
     }
+
+    const completedOrders = user.orders.filter(o => ["PAID", "READY", "COMPLETED"].includes(o.status));
+    const totalSpent = completedOrders.reduce((sum, o) => sum + o.amountPaid, 0);
 
     return NextResponse.json({
       user: {
@@ -27,6 +36,9 @@ export async function GET() {
         role: user.role,
         telegramUsername: user.telegramUsername,
         telegramId: user.telegramId,
+        createdAt: user.createdAt.toISOString(),
+        totalOrders: completedOrders.length,
+        totalSpent,
         wallet: {
           balance: user.wallet?.balance || 0.0,
         },

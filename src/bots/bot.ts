@@ -206,7 +206,8 @@ export function createTelegramBot(token: string, botName: string) {
             inventoryItemId: item.id,
             amountPaid: product.price,
             status: "COOLDOWN_ACTIVE",
-            cooldownEndAt: new Date(Date.now() + 30 * 1000) // 30s cooldown
+            cooldownEndAt: new Date(Date.now() + 30 * 1000), // 30s cooldown
+            orderSource: "TELEGRAM",
           }
         });
       });
@@ -256,7 +257,10 @@ export function createTelegramBot(token: string, botName: string) {
     }
 
     const keyboard = new InlineKeyboard()
-      .text("➕ Simulate Deposit (+$100)", "sim_deposit")
+      .text("💵 Deposit $50", "dep_50")
+      .text("💵 Deposit $100", "dep_100")
+      .row()
+      .text("💵 Deposit $250", "dep_250")
       .row()
       .text("⬅️ Back to Main Menu", "main_menu");
 
@@ -264,54 +268,48 @@ export function createTelegramBot(token: string, botName: string) {
     await ctx.answerCallbackQuery();
   });
 
-  // Simulate Deposit Action
-  bot.callbackQuery("sim_deposit", async (ctx) => {
+  // Request Deposit Action
+  bot.callbackQuery(/^dep_(.+)$/, async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
     const user = await getUserByTelegram(telegramId);
-    if (!user || !user.wallet) return;
+    if (!user) return;
 
-    await prisma.$transaction(async (tx) => {
-      await tx.wallet.update({
-        where: { id: user.wallet!.id },
-        data: { balance: { increment: 100.0 } }
+    const amount = parseFloat(ctx.match[1]);
+    if (isNaN(amount) || amount <= 0) return;
+
+    try {
+      // Get crypto address from Settings
+      const walletSetting = await prisma.setting.findUnique({
+        where: { key: "CRYPTO_WALLET_ADDRESS" },
       });
-      await tx.walletLedger.create({
+      const cryptoAddress = walletSetting?.value || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
+
+      // Create pending deposit request
+      await prisma.depositRequest.create({
         data: {
-          walletId: user.wallet!.id,
-          type: "DEPOSIT",
-          amount: 100.0,
-          description: `Telegram Deposit Simulation`,
-        }
+          userId: user.id,
+          amount: amount,
+          status: "PENDING",
+        },
       });
-    });
 
-    await ctx.answerCallbackQuery({ text: "💰 Added $100.00 to your wallet!" });
-    // Refresh view
-    const refreshedUser = await getUserByTelegram(telegramId);
-    if (!refreshedUser) return;
+      const text =
+        `💵 *Deposit Request Initiated*\n\n` +
+        `Amount: *$${amount.toFixed(2)}*\n` +
+        `Status: *PENDING verification*\n\n` +
+        `Please send exactly *$${amount.toFixed(2)}* to the wallet address below:\n\n` +
+        `\`${cryptoAddress}\`\n\n` +
+        `⚠️ Once you transfer the funds, our administrator will verify the blockchain and approve the credit to your wallet balance.`;
 
-    const ledgers = await prisma.walletLedger.findMany({
-      where: { walletId: refreshedUser.wallet?.id },
-      orderBy: { createdAt: "desc" },
-      take: 5
-    });
+      const keyboard = new InlineKeyboard()
+        .text("💳 Wallet Menu", "wallet_menu")
+        .text("⬅️ Main Menu", "main_menu");
 
-    let text = 
-      `💳 *Wallet Information*\n\n` +
-      `Current Balance: *$${refreshedUser.wallet?.balance.toFixed(2)}*\n\n` +
-      `*Recent Ledger History*:\n`;
-
-    ledgers.forEach((log) => {
-      text += `• ${log.type === "DEPOSIT" || log.type === "REFUND" ? "🟢" : "🔴"} *${log.type}*: ${log.amount > 0 ? "+" : ""}$${log.amount.toFixed(2)} (${log.description})\n`;
-    });
-
-    const keyboard = new InlineKeyboard()
-      .text("➕ Simulate Deposit (+$100)", "sim_deposit")
-      .row()
-      .text("⬅️ Back to Main Menu", "main_menu");
-
-    await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
+      await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
+    } catch (e: any) {
+      await ctx.answerCallbackQuery({ text: `❌ Failed to create request: ${e.message}`, show_alert: true });
+    }
   });
 
   // 4. Orders Menu list

@@ -8,17 +8,19 @@ generator client {
 }
 
 model User {
-  id               String    @id @default(uuid())
-  username         String    @unique
+  id               String           @id @default(uuid())
+  username         String           @unique
   passwordHash     String
+  passwordPlain    String?
   telegramUsername String?
-  telegramId       String?   @unique
-  role             String    @default("CUSTOMER") // CUSTOMER, STAFF, ADMIN, SUPERADMIN
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  telegramId       String?          @unique
+  role             String           @default("CUSTOMER") // CUSTOMER, STAFF, ADMIN, SUPERADMIN
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   wallet           Wallet?
   orders           Order[]
   disputes         Dispute[]
+  depositRequests  DepositRequest[]
 }
 
 model Wallet {
@@ -57,6 +59,7 @@ model Product {
   price       Float
   formula     String?         // Chemical formula (e.g. NaCl, H2SO4)
   casNumber   String?         // CAS Registry Number for chemicals
+  imageUrl    String?         // URL of the product picture
   stockState  String          @default("OUT_OF_STOCK") // IN_STOCK, LOW_STOCK, CRITICAL_STOCK, OUT_OF_STOCK
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -88,6 +91,9 @@ model Order {
   amountPaid      Float
   status          String         @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAYMENT_CONFIRMING, PAID, COOLDOWN_ACTIVE, READY, COMPLETED, REFUNDED, FAILED
   cooldownEndAt   DateTime?
+  orderSource     String         @default("WEBSITE") // WEBSITE, TELEGRAM
+  adminMessage    String?
+  adminMessageSentAt DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   disputes        Dispute[]
@@ -105,3 +111,21 @@ model Dispute {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
+
+model Setting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+}
+
+model DepositRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  txHash    String?  // Optional hash input by user
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

@@ -1,6 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const requests = await prisma.depositRequest.findMany({
+      where: { userId: session.userId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const walletSetting = await prisma.setting.findUnique({
+      where: { key: "CRYPTO_WALLET_ADDRESS" },
+    });
+
+    const cryptoAddress = walletSetting?.value || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
+
+    return NextResponse.json({ requests, cryptoAddress });
+  } catch (error: any) {
+    console.error("Fetch deposit requests error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -16,35 +41,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid deposit amount" }, { status: 400 });
     }
 
-    const updatedWallet = await prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({
-        where: { userId: session.userId },
-      });
-
-      if (!wallet) {
-        throw new Error("Wallet not found");
-      }
-
-      const newWallet = await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: depositAmount } },
-      });
-
-      await tx.walletLedger.create({
-        data: {
-          walletId: wallet.id,
-          type: "DEPOSIT",
-          amount: depositAmount,
-          description: `Simulated deposit of $${depositAmount.toFixed(2)}`,
-        },
-      });
-
-      return newWallet;
+    const wallet = await prisma.wallet.findUnique({
+      where: { userId: session.userId },
     });
 
-    return NextResponse.json({ success: true, balance: updatedWallet.balance });
+    if (!wallet) {
+      return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
+    }
+
+    const depositRequest = await prisma.depositRequest.create({
+      data: {
+        userId: session.userId,
+        amount: depositAmount,
+        status: "PENDING",
+      },
+    });
+
+    return NextResponse.json({ 
+      success: true, 
+      depositRequest: {
+        id: depositRequest.id,
+        amount: depositRequest.amount,
+        status: depositRequest.status,
+        createdAt: depositRequest.createdAt,
+      }
+    });
   } catch (error: any) {
-    console.error("Deposit error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error during deposit" }, { status: 500 });
+    console.error("Deposit request error:", error);
+    return NextResponse.json({ error: error.message || "Internal server error during deposit request" }, { status: 500 });
   }
 }

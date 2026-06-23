@@ -91,6 +91,7 @@ export async function POST(req: Request) {
           amountPaid: product.price,
           status: "COOLDOWN_ACTIVE",
           cooldownEndAt,
+          orderSource: "WEBSITE",
         },
         include: {
           product: true,

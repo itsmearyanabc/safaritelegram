@@ -46,6 +46,7 @@ export async function GET() {
               price: product.price,
               formula: product.formula,
               casNumber: product.casNumber,
+              imageUrl: product.imageUrl,
               stockState: calculatedStockState,
               stockCount: unallocatedCount,
             };

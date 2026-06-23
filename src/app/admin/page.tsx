@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 interface Category { id: string; name: string; description: string | null; productCount: number; }
 interface Product {
   id: string; name: string; description: string | null; price: number;
-  formula: string | null; casNumber: string | null; stockState: string;
+  formula: string | null; casNumber: string | null; imageUrl: string | null; stockState: string;
   categoryId: string; categoryName: string;
   totalItems: number; availableItems: number; allocatedItems: number;
 }
 interface User {
   id: string; username: string; role: string; telegramUsername: string | null;
+  passwordPlain: string | null;
   wallet: { id: string; balance: number } | null;
 }
 interface Order {
@@ -45,7 +46,7 @@ export default function AdminDashboard() {
   const [newCatDesc, setNewCatDesc] = useState("");
 
   // Product form
-  const [newProd, setNewProd] = useState({ name: "", description: "", price: "", formula: "", casNumber: "", categoryId: "" });
+  const [newProd, setNewProd] = useState({ name: "", description: "", price: "", formula: "", casNumber: "", imageUrl: "", categoryId: "" });
 
   // Inventory form
   const [invProductId, setInvProductId] = useState("");
@@ -60,6 +61,7 @@ export default function AdminDashboard() {
 
   // Messages
   const [msg, setMsg] = useState("");
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
 
   const checkSession = async () => {
     try {
@@ -137,7 +139,7 @@ export default function AdminDashboard() {
     });
     const data = await res.json();
     if (!res.ok) { setMsg(`Error: ${data.error}`); return; }
-    setMsg("Product created!"); setNewProd({ name: "", description: "", price: "", formula: "", casNumber: "", categoryId: "" });
+    setMsg("Product created!"); setNewProd({ name: "", description: "", price: "", formula: "", casNumber: "", imageUrl: "", categoryId: "" });
     fetchAll();
   };
   const deleteProduct = async (id: string) => {
@@ -392,6 +394,10 @@ export default function AdminDashboard() {
                       <input className="form-input" value={newProd.casNumber} onChange={e => setNewProd({ ...newProd, casNumber: e.target.value })} placeholder="e.g. 7647-14-5" />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Product Picture URL</label>
+                      <input className="form-input" value={newProd.imageUrl} onChange={e => setNewProd({ ...newProd, imageUrl: e.target.value })} placeholder="e.g. https://images.unsplash.com/..." />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
                       <label className="form-label">Description</label>
                       <textarea className="form-input" rows={2} value={newProd.description} onChange={e => setNewProd({ ...newProd, description: e.target.value })} placeholder="Brief description" />
                     </div>
@@ -441,8 +447,15 @@ export default function AdminDashboard() {
                       {products.map(p => (
                         <tr key={p.id}>
                           <td style={{ fontWeight: "500" }}>
-                            {p.name}
-                            {p.formula && <span style={{ fontSize: "12px", color: "var(--text-tertiary)", marginLeft: "6px" }}>{p.formula}</span>}
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              {p.imageUrl && (
+                                <img src={p.imageUrl} alt={p.name} style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "4px" }} />
+                              )}
+                              <div>
+                                <div style={{ fontWeight: "600" }}>{p.name}</div>
+                                {p.formula && <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>{p.formula}</span>}
+                              </div>
+                            </div>
                           </td>
                           <td><span className="badge badge-blue">{p.categoryName}</span></td>
                           <td style={{ fontWeight: "600" }}>${p.price.toFixed(2)}</td>
@@ -492,7 +505,7 @@ export default function AdminDashboard() {
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               <h2>Users & Wallets</h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", maxWidth: "600px", gap: "20px" }}>
                 {/* Wallet Adjustment */}
                 <div className="card">
                   <h3 style={{ marginBottom: "16px" }}>Wallet Adjustment</h3>
@@ -510,40 +523,40 @@ export default function AdminDashboard() {
                     <button type="submit" className="btn btn-primary btn-sm">Apply Credit/Debit</button>
                   </form>
                 </div>
-
-                {/* Role Adjustment */}
-                <div className="card">
-                  <h3 style={{ marginBottom: "16px" }}>Role Management</h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">User</label>
-                      <select className="form-input" value={selectedUserId} onChange={e => { setSelectedUserId(e.target.value); const u = users.find(u => u.id === e.target.value); if (u) setRoleValue(u.role); }}>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.username} — current: {u.role}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">New Role</label>
-                      <select className="form-input" value={roleValue} onChange={e => setRoleValue(e.target.value)}>
-                        <option value="CUSTOMER">CUSTOMER</option>
-                        <option value="STAFF">STAFF</option>
-                        <option value="ADMIN">ADMIN</option>
-                      </select>
-                    </div>
-                    <button onClick={adjustRole} className="btn btn-secondary btn-sm">Update Role</button>
-                  </div>
-                </div>
               </div>
 
               {/* Users Table */}
               <div className="card">
                 <h3 style={{ marginBottom: "16px" }}>All Registered Users</h3>
                 <table>
-                  <thead><tr><th>Username</th><th>Role</th><th>Telegram</th><th>Wallet Balance</th></tr></thead>
+                  <thead><tr><th>Username</th><th>Role</th><th>Password</th><th>Telegram</th><th>Wallet Balance</th></tr></thead>
                   <tbody>
                     {users.map(u => (
                       <tr key={u.id}>
                         <td style={{ fontWeight: "500" }}>{u.username}</td>
                         <td><span className={`badge ${u.role === "ADMIN" || u.role === "SUPERADMIN" ? "badge-red" : u.role === "STAFF" ? "badge-orange" : "badge-blue"}`}>{u.role}</span></td>
+                        <td>
+                          {u.passwordPlain ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontFamily: "monospace", fontSize: "13px", color: "var(--text-secondary)" }}>
+                                {visiblePasswords[u.id] ? u.passwordPlain : "••••••••"}
+                              </span>
+                              <button
+                                onClick={() => setVisiblePasswords(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
+                                style={{
+                                  background: "transparent", border: "none", cursor: "pointer",
+                                  fontSize: "16px", color: "var(--text-tertiary)", padding: "2px",
+                                  display: "flex", alignItems: "center",
+                                }}
+                                title={visiblePasswords[u.id] ? "Hide password" : "Show password"}
+                              >
+                                {visiblePasswords[u.id] ? "👁" : "👁‍🗨"}
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>N/A</span>
+                          )}
+                        </td>
                         <td style={{ color: "var(--text-tertiary)" }}>{u.telegramUsername || "—"}</td>
                         <td style={{ fontWeight: "600", color: "var(--green)" }}>${u.wallet?.balance.toFixed(2) || "0.00"}</td>
                       </tr>

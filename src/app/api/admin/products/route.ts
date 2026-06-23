@@ -24,6 +24,7 @@ export async function GET() {
       price: p.price,
       formula: p.formula,
       casNumber: p.casNumber,
+      imageUrl: p.imageUrl,
       stockState: p.stockState,
       categoryId: p.category.id,
       categoryName: p.category.name,
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { name, description, price, formula, casNumber, categoryId } = await req.json();
+  const { name, description, price, formula, casNumber, imageUrl, categoryId } = await req.json();
 
   if (!name || name.trim().length < 2) {
     return NextResponse.json({ error: "Product name must be at least 2 characters" }, { status: 400 });
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
       price: parseFloat(price),
       formula: formula?.trim() || null,
       casNumber: casNumber?.trim() || null,
+      imageUrl: imageUrl?.trim() || null,
       categoryId,
     },
   });
