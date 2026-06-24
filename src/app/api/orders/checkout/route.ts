@@ -92,6 +92,7 @@ export async function POST(req: Request) {
           status: "COOLDOWN_ACTIVE",
           cooldownEndAt,
           orderSource: "WEBSITE",
+          paymentMethod: "WALLET",
         },
         include: {
           product: true,

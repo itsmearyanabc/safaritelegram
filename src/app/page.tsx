@@ -26,8 +26,8 @@ export default async function Home() {
         </span>
         <nav style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           {session ? (
-            <Link href={session.role === "CUSTOMER" ? "/dashboard" : "/admin"} className="btn btn-primary btn-sm">
-              {session.role === "CUSTOMER" ? "Dashboard" : "Admin Panel"}
+            <Link href="/dashboard" className="btn btn-primary btn-sm">
+              Dashboard
             </Link>
           ) : (
             <>
@@ -80,7 +80,7 @@ export default async function Home() {
 
         <div style={{ display: "flex", gap: "12px" }}>
           {session ? (
-            <Link href={session.role === "CUSTOMER" ? "/dashboard" : "/admin"} className="btn btn-primary">
+            <Link href="/dashboard" className="btn btn-primary">
               Open Dashboard
             </Link>
           ) : (

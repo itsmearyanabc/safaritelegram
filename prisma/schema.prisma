@@ -94,9 +94,13 @@ model Order {
   orderSource     String         @default("WEBSITE") // WEBSITE, TELEGRAM
   adminMessage    String?
   adminMessageSentAt DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  disputes        Dispute[]
+  paymentMethod      String         @default("WALLET") // WALLET, DIRECT_CRYPTO
+  cryptoCurrency     String?        // BTC, ETH
+  coinbaseChargeId   String?        
+  coinbaseChargeUrl  String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  disputes           Dispute[]
 }
 
 model Dispute {

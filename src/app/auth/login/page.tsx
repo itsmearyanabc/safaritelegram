@@ -52,14 +52,8 @@ export default function Login() {
         return;
       }
 
-      const role = data.user.role;
-      if (role === "ADMIN" || role === "SUPERADMIN") {
-        router.push("/admin");
-      } else if (role === "STAFF") {
-        router.push("/staff");
-      } else {
-        router.push("/dashboard");
-      }
+      // All users on the customer site go to the dashboard
+      router.push("/dashboard");
       router.refresh();
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");

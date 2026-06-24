@@ -13,6 +13,7 @@ interface WalletLedger { id: string; type: string; amount: number; description: 
 interface Order {
   id: string; productId: string; amountPaid: number; status: string;
   cooldownEndAt: string | null; createdAt: string;
+  paymentMethod?: string; cryptoCurrency?: string | null; coinbaseChargeUrl?: string | null;
   product: Product;
   inventoryItem: { id: string; mediaUrl: string | null; locationData: string | null; data: string } | null;
 }
@@ -59,16 +60,16 @@ export default function Dashboard() {
   const [pwMsg, setPwMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
 
+  // Crypto Modal State
+  const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
+  const [selectedProductForCrypto, setSelectedProductForCrypto] = useState<string | null>(null);
+  const [cryptoCurrency, setCryptoCurrency] = useState<"BTC" | "ETH">("BTC");
+
   const checkSession = async () => {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
       if (!data.user) { router.push("/auth/login"); return; }
-      if (data.user.role !== "CUSTOMER") {
-        if (data.user.role === "STAFF") router.push("/staff");
-        else router.push("/admin");
-        return;
-      }
       setUser(data.user);
     } catch { router.push("/auth/login"); }
   };
@@ -161,7 +162,7 @@ export default function Dashboard() {
     } catch { setWalletMessage("Error processing deposit"); }
   };
 
-  const handleBuy = async (productId: string) => {
+  const handleWalletBuy = async (productId: string) => {
     setShopMsg(null);
     try {
       const r = await fetch("/api/orders/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId }) });
@@ -172,6 +173,21 @@ export default function Dashboard() {
       loadShopData(); loadWalletData(); loadOrdersData();
       setActiveTab("orders");
     } catch { setShopMsg({ type: "error", text: "Error processing purchase" }); }
+  };
+
+  const handleCryptoBuy = async () => {
+    if (!selectedProductForCrypto) return;
+    setShopMsg(null);
+    try {
+      const r = await fetch("/api/orders/crypto-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: selectedProductForCrypto, cryptoCurrency }) });
+      const d = await r.json();
+      if (!r.ok) { setShopMsg({ type: "error", text: d.error || "Purchase failed" }); setCryptoModalOpen(false); return; }
+      setShopMsg({ type: "success", text: `Crypto order created! Please complete payment.` });
+      setCryptoModalOpen(false);
+      if (d.hostedUrl) window.open(d.hostedUrl, "_blank");
+      loadShopData(); loadOrdersData();
+      setActiveTab("orders");
+    } catch { setShopMsg({ type: "error", text: "Error processing crypto purchase" }); }
   };
 
   const checkOrderStatus = async (orderId: string) => {
@@ -345,20 +361,66 @@ export default function Dashboard() {
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "14px", marginTop: "14px" }}>
                             <span style={{ fontSize: "20px", fontWeight: "700" }}>${product.price.toFixed(2)}</span>
-                            <button
-                              onClick={() => handleBuy(product.id)}
-                              disabled={product.stockCount === 0}
-                              className="btn btn-primary btn-sm"
-                              style={{ opacity: product.stockCount === 0 ? 0.4 : 1 }}
-                            >
-                              {product.stockCount === 0 ? "Out of Stock" : "Buy with Crypto"}
-                            </button>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
+                              <button
+                                onClick={() => handleWalletBuy(product.id)}
+                                disabled={product.stockCount === 0}
+                                className="btn btn-secondary btn-sm"
+                                style={{ opacity: product.stockCount === 0 ? 0.4 : 1, width: "100%" }}
+                              >
+                                {product.stockCount === 0 ? "Out of Stock" : "Buy with Balance"}
+                              </button>
+                              <button
+                                onClick={() => { setSelectedProductForCrypto(product.id); setCryptoModalOpen(true); }}
+                                disabled={product.stockCount === 0}
+                                className="btn btn-primary btn-sm"
+                                style={{ opacity: product.stockCount === 0 ? 0.4 : 1, width: "100%" }}
+                              >
+                                {product.stockCount === 0 ? "Out of Stock" : "Pay with Crypto"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 ))
+              )}
+
+              {/* Crypto Payment Modal */}
+              {cryptoModalOpen && (
+                <div style={{
+                  position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+                  background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+                  backdropFilter: "blur(4px)"
+                }}>
+                  <div className="card" style={{ width: "100%", maxWidth: "400px", background: "var(--bg-primary)" }}>
+                    <h3 style={{ marginBottom: "16px" }}>Select Cryptocurrency</h3>
+                    <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                      Choose which cryptocurrency you want to use for this direct payment via Coinbase Commerce.
+                    </p>
+                    <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
+                      <button 
+                        onClick={() => setCryptoCurrency("BTC")}
+                        className={`btn ${cryptoCurrency === "BTC" ? "btn-primary" : "btn-secondary"}`}
+                        style={{ flex: 1 }}
+                      >
+                        Bitcoin (BTC)
+                      </button>
+                      <button 
+                        onClick={() => setCryptoCurrency("ETH")}
+                        className={`btn ${cryptoCurrency === "ETH" ? "btn-primary" : "btn-secondary"}`}
+                        style={{ flex: 1 }}
+                      >
+                        Ethereum (ETH)
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", gap: "12px" }}>
+                      <button onClick={handleCryptoBuy} className="btn btn-primary" style={{ flex: 1 }}>Proceed</button>
+                      <button onClick={() => setCryptoModalOpen(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -513,6 +575,7 @@ export default function Dashboard() {
                       borderLeft: `4px solid ${
                         order.status === "READY" ? "var(--green)" :
                         order.status === "COOLDOWN_ACTIVE" ? "var(--orange)" :
+                        order.status === "PENDING_PAYMENT" ? "var(--red)" :
                         order.status === "COMPLETED" ? "var(--accent)" : "var(--border)"
                       }`
                     }}>
@@ -525,11 +588,29 @@ export default function Dashboard() {
                           <span className={`badge ${
                             order.status === "READY" ? "badge-green" :
                             order.status === "COOLDOWN_ACTIVE" ? "badge-orange" :
+                            order.status === "PENDING_PAYMENT" ? "badge-red" :
                             order.status === "COMPLETED" ? "badge-blue" : ""
                           }`}>{order.status.replace("_", " ")}</span>
                           <span style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
+
+                      {order.status === "PENDING_PAYMENT" && order.coinbaseChargeUrl && (
+                        <div style={{
+                          background: "var(--red-bg)", padding: "14px",
+                          borderRadius: "var(--radius-md)", marginBottom: "12px",
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          border: "1px solid rgba(255, 59, 48, 0.2)"
+                        }}>
+                          <div>
+                            <p style={{ color: "var(--red)", fontWeight: "600", fontSize: "14px" }}>Awaiting Crypto Payment</p>
+                            <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Please complete your {order.cryptoCurrency} payment to confirm this order.</p>
+                          </div>
+                          <a href={order.coinbaseChargeUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ background: "var(--red)", border: "none" }}>
+                            Pay Now
+                          </a>
+                        </div>
+                      )}
 
                       {isCooldown && (
                         <div style={{
@@ -593,7 +674,14 @@ export default function Dashboard() {
                       )}
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-                        <span style={{ fontWeight: "600" }}>${order.amountPaid.toFixed(2)}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <span style={{ fontWeight: "600" }}>${order.amountPaid.toFixed(2)}</span>
+                          {order.paymentMethod === "DIRECT_CRYPTO" ? (
+                            <span className="badge badge-purple" style={{ fontSize: "10px" }}>Paid via {order.cryptoCurrency}</span>
+                          ) : (
+                            <span className="badge badge-green" style={{ fontSize: "10px" }}>Paid via Wallet</span>
+                          )}
+                        </div>
                         <div style={{ display: "flex", gap: "8px" }}>
                           {order.status === "READY" && (
                             <button onClick={() => completeOrder(order.id)} className="btn btn-primary btn-sm">Confirm Received</button>
