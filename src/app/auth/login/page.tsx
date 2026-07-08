@@ -78,7 +78,7 @@ export default function Login() {
       }}>
         <div style={{ textAlign: "center", marginBottom: "32px" }}>
           <Link href="/" style={{ color: "var(--text-primary)", fontWeight: "700", fontSize: "18px" }}>
-            Safari Boys
+            Safari Bois
           </Link>
           <h2 style={{ marginTop: "20px", marginBottom: "8px" }}>Welcome Back</h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>

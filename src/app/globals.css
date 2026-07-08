@@ -1,4 +1,4 @@
-/* Safari Boys — Apple-Inspired Design System */
+/* Safari Bois — Design System */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
@@ -208,6 +208,7 @@ textarea.form-input {
 .badge-critical_stock, .badge-red { background: var(--red-bg); color: var(--red); }
 .badge-out_of_stock { background: var(--bg-secondary); color: var(--text-tertiary); }
 .badge-blue { background: var(--blue-bg); color: var(--blue); }
+.badge-purple { background: rgba(175, 82, 222, 0.08); color: var(--purple); }
 
 /* Telegram Banner */
 .telegram-banner {

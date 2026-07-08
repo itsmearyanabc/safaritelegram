@@ -22,7 +22,7 @@ export default async function Home() {
         zIndex: 100,
       }}>
         <span style={{ fontSize: "18px", fontWeight: "700", letterSpacing: "-0.01em", color: "var(--text-primary)" }}>
-          Safari Boys
+          Safari Bois
         </span>
         <nav style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           {session ? (
@@ -136,7 +136,7 @@ export default async function Home() {
         color: "var(--text-tertiary)",
         borderTop: "1px solid var(--border)",
       }}>
-        © {new Date().getFullYear()} Safari Boys. All rights reserved.
+        © {new Date().getFullYear()} Safari Bois. All rights reserved.
       </footer>
     </div>
   );

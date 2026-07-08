@@ -252,7 +252,7 @@ export default function Dashboard() {
         borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "18px", fontWeight: "700" }}>Safari Boys</span>
+          <span style={{ fontSize: "18px", fontWeight: "700" }}>Safari Bois</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <div style={{
@@ -351,7 +351,7 @@ export default function Dashboard() {
                               {product.casNumber && <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>CAS: {product.casNumber}</span>}
                             </div>
                             <span className={`badge badge-${product.stockState.toLowerCase()}`} style={{ marginBottom: "8px" }}>
-                              {product.stockState.replace("_", " ")} ({product.stockCount})
+                              {product.stockState.replace(/_/g, " ")} ({product.stockCount})
                             </span>
                             {product.description && (
                               <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "8px", lineHeight: "1.5" }}>
@@ -590,7 +590,7 @@ export default function Dashboard() {
                             order.status === "COOLDOWN_ACTIVE" ? "badge-orange" :
                             order.status === "PENDING_PAYMENT" ? "badge-red" :
                             order.status === "COMPLETED" ? "badge-blue" : ""
-                          }`}>{order.status.replace("_", " ")}</span>
+                          }`}>{order.status.replace(/_/g, " ")}</span>
                           <span style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>

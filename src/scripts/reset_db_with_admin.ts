@@ -11,18 +11,35 @@ async function main() {
   await prisma.product.deleteMany({});
   await prisma.category.deleteMany({});
   await prisma.walletLedger.deleteMany({});
+  await prisma.depositRequest.deleteMany({});
   await prisma.wallet.deleteMany({});
+  await prisma.setting.deleteMany({});
   await prisma.user.deleteMany({});
 
   // Create default Admin account
   const salt = await bcrypt.genSalt(10);
-  const adminPassword = await bcrypt.hash("admin123", salt);
+  const adminPassword = "admin123";
+  const adminPasswordHash = await bcrypt.hash(adminPassword, salt);
 
-  await prisma.user.create({
+  const admin = await prisma.user.create({
     data: {
       username: "admin",
-      passwordHash: adminPassword,
-      role: "ADMIN",
+      passwordHash: adminPasswordHash,
+      passwordPlain: adminPassword,
+      role: "SUPERADMIN",
+    },
+  });
+
+  // Create wallet for admin
+  await prisma.wallet.create({
+    data: { userId: admin.id, balance: 0.0 },
+  });
+
+  // Seed default settings
+  await prisma.setting.create({
+    data: {
+      key: "CRYPTO_WALLET_ADDRESS",
+      value: process.env.CRYPTO_WALLET_ADDRESS || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
     },
   });
 
@@ -31,6 +48,7 @@ async function main() {
   console.log("====================================================");
   console.log("Username: admin");
   console.log("Password: admin123");
+  console.log("Role: SUPERADMIN");
   console.log("====================================================");
 }
 

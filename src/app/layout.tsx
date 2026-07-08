@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Safari Boys - Premium B2B Chemical Compounds",
-  description: "Secure closed-wallet chemical compound distribution platform for middle schools, colleges, and B2B scientific laboratories.",
+  title: "Safari Bois — Secure Compound Sourcing",
+  description: "Browse, order, and track deliveries with our secure closed-wallet system, crypto payments, and 24/7 Telegram bot access.",
 };
 
 export default function RootLayout({

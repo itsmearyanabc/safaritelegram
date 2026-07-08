@@ -1,24 +1,26 @@
 {
-  "name": "safari-boys",
+  "name": "safari-bois",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "dev:admin": "set ENABLE_ADMIN=true&& next dev -p 3001",
-    "build:admin": "set ENABLE_ADMIN=true&& next build",
-    "start:admin": "set ENABLE_ADMIN=true&& next start -p 3001",
+    "dev:admin": "cross-env ENABLE_ADMIN=true next dev -p 3001",
+    "build:admin": "cross-env ENABLE_ADMIN=true next build",
+    "start:admin": "cross-env ENABLE_ADMIN=true next start -p 3001",
     "seed": "tsx src/scripts/seed.ts",
     "test:orders": "tsx src/scripts/test_client.ts",
     "bots": "tsx src/bots/runner.ts",
-    "reset-db": "tsx src/scripts/reset_db_with_admin.ts"
+    "reset-db": "tsx src/scripts/reset_db_with_admin.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.11.1",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.5.0",
     "grammy": "^1.44.0",
     "next": "16.2.9",
     "prisma": "^7.8.0",
@@ -27,7 +29,6 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

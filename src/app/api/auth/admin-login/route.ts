@@ -12,22 +12,9 @@ export async function POST(req: Request) {
     }
 
     // Attempt to find the user
-    let user = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { username },
     });
-
-    // Automatically create the admin user if it doesn't exist (for setup convenience as requested)
-    if (!user && username === "admin" && password === "admin 123") {
-      const passwordHash = await bcrypt.hash(password, 10);
-      user = await prisma.user.create({
-        data: {
-          username,
-          passwordHash,
-          passwordPlain: password, // As requested in the platform's user management logic
-          role: "SUPERADMIN",
-        },
-      });
-    }
 
     if (!user) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });

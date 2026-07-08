@@ -22,12 +22,13 @@ export function createTelegramBot(token: string, botName: string) {
 
     if (!user) {
       const welcomeNoAuth = 
-        `👋 Welcome to *Safari Boys Laboratory Bot* (${botName})!\n\n` +
+        `👋 Welcome to *Safari Bois Bot* (${botName})!\n\n` +
         `We could not find an account linked to your Telegram ID: \`${telegramId}\`.\n\n` +
         `Please register on our website and associate this Telegram ID or your username \`@${ctx.from?.username || ""}\` in your profile.`;
       
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
       const keyboard = new InlineKeyboard()
-        .url("🌐 Visit Website", "http://localhost:3000")
+        .url("🌐 Visit Website", siteUrl)
         .row()
         .text("🔄 Check Link / Refresh", "refresh_auth");
 
@@ -37,7 +38,7 @@ export function createTelegramBot(token: string, botName: string) {
 
     // Welcomes authenticated user
     const welcomeAuth = 
-      `🧪 *Safari Boys Laboratory* - Main Menu (${botName})\n\n` +
+      `🧪 *Safari Bois* - Main Menu (${botName})\n\n` +
       `User: *${user.username}* | Role: *${user.role}*\n` +
       `Wallet Balance: *$${user.wallet?.balance.toFixed(2) || "0.00"}*\n\n` +
       `Manage your orders, browse stock, or raise disputes below.`;
@@ -73,7 +74,7 @@ export function createTelegramBot(token: string, botName: string) {
     if (!user) return;
 
     const welcomeAuth = 
-      `🧪 *Safari Boys Laboratory* - Main Menu (${botName})\n\n` +
+      `🧪 *Safari Bois* - Main Menu (${botName})\n\n` +
       `User: *${user.username}* | Role: *${user.role}*\n` +
       `Wallet Balance: *$${user.wallet?.balance.toFixed(2) || "0.00"}*\n\n` +
       `Select an option below:`;

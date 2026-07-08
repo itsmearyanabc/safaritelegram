@@ -2,37 +2,41 @@ import { prisma } from "../lib/db";
 import bcrypt from "bcryptjs";
 
 async function main() {
-  console.log("Seeding database...");
+  console.log("Seeding Safari Bois database...");
 
-  // Clear existing data
+  // Clear existing data (in correct order for foreign key constraints)
   await prisma.dispute.deleteMany({});
   await prisma.order.deleteMany({});
   await prisma.inventoryItem.deleteMany({});
   await prisma.product.deleteMany({});
   await prisma.category.deleteMany({});
   await prisma.walletLedger.deleteMany({});
+  await prisma.depositRequest.deleteMany({});
   await prisma.wallet.deleteMany({});
+  await prisma.setting.deleteMany({});
   await prisma.user.deleteMany({});
 
   // 1. Create Users
   const salt = await bcrypt.genSalt(10);
   
-  const adminPassword = await bcrypt.hash("admin123", salt);
-  const staffPassword = await bcrypt.hash("staff123", salt);
-  const customerPassword = await bcrypt.hash("customer123", salt);
+  const adminPassword = "admin123";
+  const staffPassword = "staff123";
+  const customerPassword = "customer123";
 
   const admin = await prisma.user.create({
     data: {
       username: "admin",
-      passwordHash: adminPassword,
-      role: "ADMIN",
+      passwordHash: await bcrypt.hash(adminPassword, salt),
+      passwordPlain: adminPassword,
+      role: "SUPERADMIN",
     },
   });
 
   const staff = await prisma.user.create({
     data: {
       username: "staff",
-      passwordHash: staffPassword,
+      passwordHash: await bcrypt.hash(staffPassword, salt),
+      passwordPlain: staffPassword,
       role: "STAFF",
     },
   });
@@ -40,20 +44,34 @@ async function main() {
   const customer = await prisma.user.create({
     data: {
       username: "customer",
-      passwordHash: customerPassword,
+      passwordHash: await bcrypt.hash(customerPassword, salt),
+      passwordPlain: customerPassword,
       role: "CUSTOMER",
     },
   });
 
-  // Initialize customer wallet
+  // Create wallets for ALL users (not just customer)
   await prisma.wallet.create({
+    data: { userId: admin.id, balance: 0.0 },
+  });
+  await prisma.wallet.create({
+    data: { userId: staff.id, balance: 0.0 },
+  });
+  await prisma.wallet.create({
+    data: { userId: customer.id, balance: 500.0 },
+  });
+
+  console.log("Users & wallets seeded successfully.");
+
+  // Seed default settings
+  await prisma.setting.create({
     data: {
-      userId: customer.id,
-      balance: 500.0, // Start with some test cash
+      key: "CRYPTO_WALLET_ADDRESS",
+      value: process.env.CRYPTO_WALLET_ADDRESS || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
     },
   });
 
-  console.log("Users seeded successfully.");
+  console.log("Settings seeded successfully.");
 
   // 2. Create Categories
   const acids = await prisma.category.create({
@@ -132,15 +150,13 @@ async function main() {
   console.log("Products seeded successfully.");
 
   // 4. Create FIFO Inventory Items (allocated in order of creation)
-  // For each product, we create 5 inventory items
   for (const product of products) {
     for (let i = 1; i <= 5; i++) {
       await prisma.inventoryItem.create({
         data: {
           productId: product.id,
-          data: `BATCH-${product.formula || "CHEM"}-${1000 + i} | Batch Certificate: https://certificates.safari-boys.io/batch-${product.formula?.toLowerCase()}-${i}.pdf | Lab pickup locker instructions: Go to shelf A${i}, enter code *9821#`,
-          mediaUrl: `https://images.unsplash.com/photo-1603126857599-${i}?w=500&auto=format&fit=crop`,
-          locationData: `Storage Bay ${String.fromCharCode(65 + i)}-${i * 10} | Coordinates: 45.4215° N, 75.6972° W`,
+          data: `BATCH-${product.formula || "CHEM"}-${1000 + i} | Lab pickup locker: Shelf A${i}, code *9821#`,
+          locationData: `Storage Bay ${String.fromCharCode(65 + i)}-${i * 10} | 45.4215° N, 75.6972° W`,
           isAllocated: false,
         },
       });
@@ -148,7 +164,12 @@ async function main() {
   }
 
   console.log("FIFO Inventory Items seeded successfully.");
+  console.log("========================================");
   console.log("Seeding complete!");
+  console.log("Admin login: admin / admin123 (SUPERADMIN)");
+  console.log("Staff login: staff / staff123 (STAFF)");
+  console.log("Customer login: customer / customer123 (CUSTOMER, $500 balance)");
+  console.log("========================================");
 }
 
 main()
