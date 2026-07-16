@@ -1,6 +1,16 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { prisma } from "../lib/db";
 import { getStockState } from "../app/api/inventory/products/route";
+import bcrypt from "bcryptjs";
+
+// Session state storage for bot login/registration
+interface AuthState {
+  action: "LOGIN" | "SIGNUP" | null;
+  step: "CAPTCHA" | "USERNAME" | "PASSWORD";
+  captchaAnswer?: number;
+  username?: string;
+}
+const userStates = new Map<number, AuthState>();
 
 export function createTelegramBot(token: string, botName: string) {
   const bot = new Bot(token);
@@ -18,19 +28,21 @@ export function createTelegramBot(token: string, botName: string) {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
 
+    // Clear active auth state on start
+    userStates.delete(telegramId);
+
     const user = await getUserByTelegram(telegramId);
 
     if (!user) {
       const welcomeNoAuth = 
         `👋 Welcome to *Safari Bois Bot* (${botName})!\n\n` +
         `We could not find an account linked to your Telegram ID: \`${telegramId}\`.\n\n` +
-        `Please register on our website and associate this Telegram ID or your username \`@${ctx.from?.username || ""}\` in your profile.`;
+        `Choose an option below to get started:`;
       
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
       const keyboard = new InlineKeyboard()
-        .url("🌐 Visit Website", siteUrl)
+        .text("🔑 Link Existing Account", "auth_login")
         .row()
-        .text("🔄 Check Link / Refresh", "refresh_auth");
+        .text("📝 Create New Account", "auth_signup");
 
       await ctx.reply(welcomeNoAuth, { parse_mode: "Markdown", reply_markup: keyboard });
       return;
@@ -53,17 +65,42 @@ export function createTelegramBot(token: string, botName: string) {
     await ctx.reply(welcomeAuth, { parse_mode: "Markdown", reply_markup: keyboard });
   });
 
-  // Action: Refresh Auth
-  bot.callbackQuery("refresh_auth", async (ctx) => {
+  // Action: Initiate Login
+  bot.callbackQuery("auth_login", async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
-    const user = await getUserByTelegram(telegramId);
-    if (!user) {
-      await ctx.answerCallbackQuery({ text: "❌ Link not found yet. Please check your website settings.", show_alert: true });
-    } else {
-      await ctx.answerCallbackQuery({ text: "✅ Account linked successfully!" });
-      await ctx.editMessageText(`Setup complete! Run /start to open the Main Menu.`);
-    }
+
+    const num1 = Math.floor(Math.random() * 9) + 1;
+    const num2 = Math.floor(Math.random() * 9) + 1;
+    const sum = num1 + num2;
+
+    userStates.set(telegramId, { action: "LOGIN", step: "CAPTCHA", captchaAnswer: sum });
+    await ctx.editMessageText(
+      `🤖 *Security Verification*\n\n` +
+      `Solve the mathematical verification (same as website):\n` +
+      `*What is ${num1} + ${num2}?*`,
+      { parse_mode: "Markdown" }
+    );
+    await ctx.answerCallbackQuery();
+  });
+
+  // Action: Initiate Signup
+  bot.callbackQuery("auth_signup", async (ctx) => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const num1 = Math.floor(Math.random() * 9) + 1;
+    const num2 = Math.floor(Math.random() * 9) + 1;
+    const sum = num1 + num2;
+
+    userStates.set(telegramId, { action: "SIGNUP", step: "CAPTCHA", captchaAnswer: sum });
+    await ctx.editMessageText(
+      `🤖 *Security Verification*\n\n` +
+      `Solve the mathematical verification (same as website):\n` +
+      `*What is ${num1} + ${num2}?*`,
+      { parse_mode: "Markdown" }
+    );
+    await ctx.answerCallbackQuery();
   });
 
   // Action: Main Menu (Back button)
@@ -421,6 +458,128 @@ export function createTelegramBot(token: string, botName: string) {
 
     await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
     await ctx.answerCallbackQuery();
+  });
+
+  // Handle text messages for Login / Signup state machine
+  bot.on("message:text", async (ctx) => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const state = userStates.get(telegramId);
+    if (!state) return;
+
+    const text = ctx.message.text.trim();
+
+    // Cancel command
+    if (text === "/cancel") {
+      userStates.delete(telegramId);
+      await ctx.reply("❌ Authentication cancelled. Type /start to try again.");
+      return;
+    }
+
+    if (state.step === "CAPTCHA") {
+      const answer = parseInt(text);
+      if (isNaN(answer) || answer !== state.captchaAnswer) {
+        userStates.delete(telegramId);
+        await ctx.reply("❌ Incorrect CAPTCHA verification. Authentication cancelled. Type /start to try again.");
+        return;
+      }
+      
+      // Captcha verification passed, proceed to Username
+      userStates.set(telegramId, { ...state, step: "USERNAME" });
+      if (state.action === "LOGIN") {
+        await ctx.reply("🔑 Please enter your website Username:");
+      } else {
+        await ctx.reply("📝 Please enter a new Username for your account (minimum 3 characters):");
+      }
+      return;
+    }
+
+    if (state.action === "LOGIN") {
+      if (state.step === "USERNAME") {
+        const user = await prisma.user.findUnique({ where: { username: text } });
+        if (!user) {
+          await ctx.reply("❌ Username not found on website. Please enter your website Username (or type /cancel):");
+          return;
+        }
+        userStates.set(telegramId, { action: "LOGIN", step: "PASSWORD", username: text });
+        await ctx.reply("🔑 Please enter your Password:");
+      } else if (state.step === "PASSWORD") {
+        const username = state.username!;
+        const user = await prisma.user.findUnique({ where: { username } });
+        if (!user) {
+          userStates.delete(telegramId);
+          await ctx.reply("❌ User not found. Please start over with /start.");
+          return;
+        }
+
+        const passwordMatch = await bcrypt.compare(text, user.passwordHash);
+        if (!passwordMatch) {
+          await ctx.reply("❌ Incorrect password. Please try again (or type /cancel):");
+          return;
+        }
+
+        // Link this Telegram account
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            telegramId: String(telegramId),
+            telegramUsername: ctx.from.username || null,
+          },
+        });
+
+        userStates.delete(telegramId);
+        await ctx.reply("✅ Success! Your Telegram account has been linked to your website profile. Type /start to open the Shop!");
+      }
+    } else if (state.action === "SIGNUP") {
+      if (state.step === "USERNAME") {
+        if (text.length < 3) {
+          await ctx.reply("❌ Username must be at least 3 characters. Please enter a different Username:");
+          return;
+        }
+
+        const existingUser = await prisma.user.findUnique({ where: { username: text } });
+        if (existingUser) {
+          await ctx.reply("❌ Username is already taken on the website. Please choose a different Username:");
+          return;
+        }
+
+        userStates.set(telegramId, { action: "SIGNUP", step: "PASSWORD", username: text });
+        await ctx.reply("🔑 Please enter a new Password (minimum 6 characters):");
+      } else if (state.step === "PASSWORD") {
+        if (text.length < 6) {
+          await ctx.reply("❌ Password must be at least 6 characters. Please enter your password again:");
+          return;
+        }
+
+        const username = state.username!;
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(text, salt);
+
+        await prisma.$transaction(async (tx) => {
+          const user = await tx.user.create({
+            data: {
+              username,
+              passwordHash,
+              passwordPlain: text,
+              telegramId: String(telegramId),
+              telegramUsername: ctx.from.username || null,
+              role: "CUSTOMER",
+            },
+          });
+
+          await tx.wallet.create({
+            data: {
+              userId: user.id,
+              balance: 0.0,
+            },
+          });
+        });
+
+        userStates.delete(telegramId);
+        await ctx.reply("🎉 Account successfully registered and linked! You can now access all services. Type /start to open the Shop!");
+      }
+    }
   });
 
   return bot;

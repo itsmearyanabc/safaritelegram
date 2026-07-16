@@ -39,8 +39,8 @@ export async function POST(req: Request) {
       },
     });
 
-    // Telegram Bot Integration
-    if (order.orderSource === "TELEGRAM" && order.user.telegramId) {
+    // Telegram Bot Integration - send message if user has linked their Telegram
+    if (order.user.telegramId) {
       const botToken = process.env.TELEGRAM_BOT_1_TOKEN;
       if (botToken && botToken !== "PLACEHOLDER_BOT_1_TOKEN") {
         try {
@@ -58,16 +58,14 @@ export async function POST(req: Request) {
               parse_mode: 'Markdown',
             })
           });
-        } catch (e) {
-          console.error("Failed to send Telegram message", e);
+        } catch {
           // Don't fail the request if Telegram fails, as the message is saved in DB.
         }
       }
     }
 
     return NextResponse.json({ success: true, order: updatedOrder });
-  } catch (error) {
-    console.error("Send message error:", error);
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
