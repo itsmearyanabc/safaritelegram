@@ -6,10 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed": "tsx src/scripts/seed.ts",
-    "test:orders": "tsx src/scripts/test_client.ts",
-    "bots": "tsx src/bots/runner.ts",
-    "reset-db": "tsx src/scripts/reset_db_with_admin.ts",
+    "seed": "tsx --env-file=.env src/scripts/seed.ts",
+    "test:orders": "tsx --env-file=.env src/scripts/test_client.ts",
+    "bots": "tsx --env-file=.env src/bots/runner.ts",
+    "reset-db": "tsx --env-file=.env src/scripts/reset_db_with_admin.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Safari Bois
 
-## Getting Started
+Closed-wallet telesales shop with website checkout and dual Telegram bots.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 + React 19
+- Prisma 7 + PostgreSQL
+- Grammy (Telegram long-polling)
+
+## Local setup
+
+1. Copy env and fill tokens:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required vars: `DATABASE_URL`, `SESSION_SECRET`, `TELEGRAM_BOT_1_TOKEN`, `NEXT_PUBLIC_SITE_URL`, `ENABLE_ADMIN=true`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. Start Postgres (example with Docker):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker run -d --name safari-postgres \
+  -e POSTGRES_USER=safari_user \
+  -e POSTGRES_PASSWORD=safari_pass \
+  -e POSTGRES_DB=safari_db \
+  -p 5434:5432 postgres:16-alpine
+```
 
-## Learn More
+Then set:
 
-To learn more about Next.js, take a look at the following resources:
+```env
+DATABASE_URL="postgresql://safari_user:safari_pass@127.0.0.1:5434/safari_db"
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. Push schema and seed:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npx prisma db push
+npm run seed
+```
 
-## Deploy on Vercel
+Seeded logins:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| User | Password | Role |
+|------|----------|------|
+| admin | admin123 | SUPERADMIN |
+| staff | staff123 | STAFF |
+| customer | customer123 | CUSTOMER ($500) |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. Run **two** processes:
+
+```bash
+npm run dev    # website — http://localhost:3000
+npm run bots   # Telegram bots (required; website does not start them)
+```
+
+- Shop / dashboard: http://localhost:3000  
+- Admin panel: http://localhost:3000/control-panel-x7k9  
+- Telegram: open your bot and send `/start`
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Next.js website |
+| `npm run bots` | Telegram long-polling worker |
+| `npm run seed` | Seed users, products, inventory |
+| `npm run reset-db` | Reset DB and recreate admin |
+| `npm run build` / `npm start` | Production web |
+
+## Deploy (Render)
+
+`render.yaml` defines:
+
+- `safari-web` — website + admin (`ENABLE_ADMIN=true`)
+- `safari-bot` — Telegram worker
+- `safari-db` — Postgres
+
+Set `TELEGRAM_BOT_1_TOKEN`, `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`, and `NEXT_PUBLIC_SITE_URL` in the Render dashboard (`sync: false` vars).

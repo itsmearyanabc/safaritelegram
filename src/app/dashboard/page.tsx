@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 interface Product {
@@ -65,6 +65,7 @@ export default function Dashboard() {
   const [tgUsernameInput, setTgUsernameInput] = useState("");
   const [tgMsg, setTgMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [tgLoading, setTgLoading] = useState(false);
+  const tgInputsSeeded = useRef(false);
 
   // Crypto Modal State
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
@@ -82,12 +83,17 @@ export default function Dashboard() {
     { code: "TRX", label: "Tron (TRX)", icon: "⟐" },
   ];
 
-  const checkSession = async () => {
+  const checkSession = async (opts?: { seedTelegram?: boolean }) => {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
       if (!data.user) { router.push("/auth/login"); return; }
       setUser(data.user);
+      if (opts?.seedTelegram || !tgInputsSeeded.current) {
+        setTgIdInput(data.user.telegramId || "");
+        setTgUsernameInput(data.user.telegramUsername || "");
+        tgInputsSeeded.current = true;
+      }
     } catch { router.push("/auth/login"); }
   };
 
@@ -100,18 +106,11 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await checkSession();
+      await checkSession({ seedTelegram: true });
       await Promise.all([loadShopData(), loadWalletData(), loadOrdersData(), loadDisputesData(), loadDepositRequests()]);
       setLoading(false);
     })();
   }, []);
-
-  useEffect(() => {
-    if (user) {
-      setTgIdInput(user.telegramId || "");
-      setTgUsernameInput(user.telegramUsername || "");
-    }
-  }, [user]);
 
   // Poll cooldowns
   useEffect(() => {
@@ -177,20 +176,32 @@ export default function Dashboard() {
     setTgMsg(null);
     setTgLoading(true);
     try {
+      const trimmedId = tgIdInput.trim();
+      const trimmedUsername = tgUsernameInput.trim();
+      // Empty ID means "leave unchanged" — do not accidentally unlink a bot-linked account
+      const payload: { telegramId?: string | null; telegramUsername?: string | null } = {
+        telegramUsername: trimmedUsername || null,
+      };
+      if (trimmedId) {
+        payload.telegramId = trimmedId;
+      } else if (user?.telegramId) {
+        payload.telegramId = user.telegramId;
+      } else {
+        payload.telegramId = null;
+      }
+
       const res = await fetch("/api/auth/update-telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telegramId: tgIdInput.trim() || null,
-          telegramUsername: tgUsernameInput.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
         setTgMsg({ type: "error", text: data.error || "Failed to update Telegram details" });
       } else {
         setTgMsg({ type: "success", text: "Telegram settings updated successfully!" });
-        await checkSession();
+        tgInputsSeeded.current = false;
+        await checkSession({ seedTelegram: true });
       }
     } catch {
       setTgMsg({ type: "error", text: "An error occurred" });

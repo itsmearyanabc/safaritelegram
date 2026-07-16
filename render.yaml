@@ -24,6 +24,8 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
+      - key: ENABLE_ADMIN
+        value: "true"
       - key: TELEGRAM_BOT_1_TOKEN
         sync: false
       - key: TELEGRAM_BOT_USERNAME

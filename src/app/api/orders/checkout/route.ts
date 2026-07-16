@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getStockState } from "../../inventory/products/route";
+import { getStockState } from "@/lib/stock";
 
 export async function POST(req: Request) {
   try {

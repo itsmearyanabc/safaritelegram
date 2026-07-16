@@ -13,6 +13,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden. Admin privileges required." }, { status: 403 });
     }
 
+    // Re-check role from DB so demoted cookies cannot keep privileges
+    const actor = await prisma.user.findUnique({ where: { id: session.userId } });
+    if (!actor || !["ADMIN", "SUPERADMIN"].includes(actor.role)) {
+      return NextResponse.json({ error: "Forbidden. Admin privileges required." }, { status: 403 });
+    }
+
     const { userId, role } = await req.json();
 
     if (!userId || !role) {
@@ -21,6 +27,23 @@ export async function POST(req: Request) {
 
     if (!["CUSTOMER", "STAFF", "ADMIN"].includes(role)) {
       return NextResponse.json({ error: "Invalid role specification" }, { status: 400 });
+    }
+
+    const target = await prisma.user.findUnique({ where: { id: userId } });
+    if (!target) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (target.role === "SUPERADMIN") {
+      return NextResponse.json({ error: "Cannot change a SUPERADMIN role." }, { status: 403 });
+    }
+
+    if (role === "ADMIN" && actor.role !== "SUPERADMIN") {
+      return NextResponse.json({ error: "Only SUPERADMIN can assign ADMIN role." }, { status: 403 });
+    }
+
+    if (target.id === actor.id && role !== actor.role) {
+      return NextResponse.json({ error: "You cannot change your own role." }, { status: 403 });
     }
 
     const updatedUser = await prisma.user.update({

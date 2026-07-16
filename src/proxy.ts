@@ -4,12 +4,9 @@ import type { NextRequest } from "next/server";
 /**
  * Security Proxy: Gates the control panel and all admin API routes.
  *
- * - On the CUSTOMER site (ENABLE_ADMIN is NOT set): all admin routes
- *   return a genuine 404, making the control panel completely invisible.
- * - On the ADMIN site (ENABLE_ADMIN=true, runs on a different port/domain):
- *   admin routes are accessible normally.
- *
- * This ensures full route-level isolation between the two deployments.
+ * Admin lives on the same deployment as the customer site.
+ * Routes are enabled by default; set ENABLE_ADMIN=false to hide them
+ * (e.g. a customer-only mirror deploy).
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -19,12 +16,9 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api/client-admin") ||
     pathname.startsWith("/api/admin");
 
-  if (isAdminRoute) {
-    const adminEnabled = process.env.ENABLE_ADMIN === "true";
-    if (!adminEnabled) {
-      // Return a genuine 404 — don't reveal that the route exists
-      return new NextResponse("Not Found", { status: 404 });
-    }
+  if (isAdminRoute && process.env.ENABLE_ADMIN === "false") {
+    // Return a genuine 404 — don't reveal that the route exists
+    return new NextResponse("Not Found", { status: 404 });
   }
 
   return NextResponse.next();

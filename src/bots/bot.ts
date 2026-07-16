@@ -1,6 +1,6 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { prisma } from "../lib/db";
-import { getStockState } from "../app/api/inventory/products/route";
+import { getStockState, escapeTelegramMarkdown as esc } from "../lib/stock";
 import bcrypt from "bcryptjs";
 
 // Session state storage for bot login/registration
@@ -15,16 +15,13 @@ const userStates = new Map<number, AuthState>();
 export function createTelegramBot(token: string, botName: string) {
   const bot = new Bot(token);
 
-  // Global error handler — keeps the bot alive on errors
+  // Global error handler — keeps the bot alive and logs the real cause
   bot.catch((err) => {
     const ctx = err.ctx;
-    const e = err.error;
-    // Attempt to notify the user
-    try {
-      ctx.reply("⚠️ Something went wrong. Please try again later or type /start.").catch(() => {});
-    } catch {}
+    console.error(`[${botName}] Error in update ${ctx.update.update_id}:`, err.error);
+    ctx.reply("⚠️ Something went wrong. Please try again later or type /start.").catch(() => {});
   });
-  // Helper: Find or verify user by Telegram ID
+
   async function getUserByTelegram(telegramId: number) {
     return prisma.user.findUnique({
       where: { telegramId: String(telegramId) },
@@ -32,22 +29,39 @@ export function createTelegramBot(token: string, botName: string) {
     });
   }
 
+  function mainMenuKeyboard() {
+    return new InlineKeyboard()
+      .text("🧪 Browse Shop", "shop_categories")
+      .text("💳 Wallet & Ledger", "wallet_menu")
+      .row()
+      .text("📦 Track Orders", "orders_menu")
+      .text("⚖️ Disputes Log", "disputes_menu");
+  }
+
+  function welcomeAuthText(user: { username: string; role: string; wallet?: { balance: number } | null }) {
+    return (
+      `🧪 *Safari Bois* - Main Menu (${esc(botName)})\n\n` +
+      `User: *${esc(user.username)}* | Role: *${esc(user.role)}*\n` +
+      `Wallet Balance: *$${(user.wallet?.balance ?? 0).toFixed(2)}*\n\n` +
+      `Manage your orders, browse stock, or raise disputes below.`
+    );
+  }
+
   // 1. Start Command / Welcome Menu
   bot.command("start", async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
 
-    // Clear active auth state on start
     userStates.delete(telegramId);
 
     const user = await getUserByTelegram(telegramId);
 
     if (!user) {
-      const welcomeNoAuth = 
-        `👋 Welcome to *Safari Bois Bot* (${botName})!\n\n` +
+      const welcomeNoAuth =
+        `👋 Welcome to *Safari Bois Bot* (${esc(botName)})!\n\n` +
         `We could not find an account linked to your Telegram ID: \`${telegramId}\`.\n\n` +
         `Choose an option below to get started:`;
-      
+
       const keyboard = new InlineKeyboard()
         .text("🔑 Link Existing Account", "auth_login")
         .row()
@@ -57,24 +71,12 @@ export function createTelegramBot(token: string, botName: string) {
       return;
     }
 
-    // Welcomes authenticated user
-    const welcomeAuth = 
-      `🧪 *Safari Bois* - Main Menu (${botName})\n\n` +
-      `User: *${user.username}* | Role: *${user.role}*\n` +
-      `Wallet Balance: *$${user.wallet?.balance.toFixed(2) || "0.00"}*\n\n` +
-      `Manage your orders, browse stock, or raise disputes below.`;
-
-    const keyboard = new InlineKeyboard()
-      .text("🧪 Browse Shop", "shop_categories")
-      .text("💳 Wallet & Ledger", "wallet_menu")
-      .row()
-      .text("📦 Track Orders", "orders_menu")
-      .text("⚖️ Disputes Log", "disputes_menu");
-
-    await ctx.reply(welcomeAuth, { parse_mode: "Markdown", reply_markup: keyboard });
+    await ctx.reply(welcomeAuthText(user), {
+      parse_mode: "Markdown",
+      reply_markup: mainMenuKeyboard(),
+    });
   });
 
-  // Action: Initiate Login
   bot.callbackQuery("auth_login", async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
@@ -86,14 +88,13 @@ export function createTelegramBot(token: string, botName: string) {
     userStates.set(telegramId, { action: "LOGIN", step: "CAPTCHA", captchaAnswer: sum });
     await ctx.editMessageText(
       `🤖 *Security Verification*\n\n` +
-      `Solve the mathematical verification (same as website):\n` +
-      `*What is ${num1} + ${num2}?*`,
+        `Solve the mathematical verification (same as website):\n` +
+        `*What is ${num1} + ${num2}?*`,
       { parse_mode: "Markdown" }
     );
     await ctx.answerCallbackQuery();
   });
 
-  // Action: Initiate Signup
   bot.callbackQuery("auth_signup", async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
@@ -105,34 +106,26 @@ export function createTelegramBot(token: string, botName: string) {
     userStates.set(telegramId, { action: "SIGNUP", step: "CAPTCHA", captchaAnswer: sum });
     await ctx.editMessageText(
       `🤖 *Security Verification*\n\n` +
-      `Solve the mathematical verification (same as website):\n` +
-      `*What is ${num1} + ${num2}?*`,
+        `Solve the mathematical verification (same as website):\n` +
+        `*What is ${num1} + ${num2}?*`,
       { parse_mode: "Markdown" }
     );
     await ctx.answerCallbackQuery();
   });
 
-  // Action: Main Menu (Back button)
   bot.callbackQuery("main_menu", async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
     const user = await getUserByTelegram(telegramId);
-    if (!user) return;
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
 
-    const welcomeAuth = 
-      `🧪 *Safari Bois* - Main Menu (${botName})\n\n` +
-      `User: *${user.username}* | Role: *${user.role}*\n` +
-      `Wallet Balance: *$${user.wallet?.balance.toFixed(2) || "0.00"}*\n\n` +
-      `Select an option below:`;
-
-    const keyboard = new InlineKeyboard()
-      .text("🧪 Browse Shop", "shop_categories")
-      .text("💳 Wallet & Ledger", "wallet_menu")
-      .row()
-      .text("📦 Track Orders", "orders_menu")
-      .text("⚖️ Disputes Log", "disputes_menu");
-
-    await ctx.editMessageText(welcomeAuth, { parse_mode: "Markdown", reply_markup: keyboard });
+    await ctx.editMessageText(welcomeAuthText(user), {
+      parse_mode: "Markdown",
+      reply_markup: mainMenuKeyboard(),
+    });
     await ctx.answerCallbackQuery();
   });
 
@@ -140,18 +133,17 @@ export function createTelegramBot(token: string, botName: string) {
   bot.callbackQuery("shop_categories", async (ctx) => {
     const categories = await prisma.category.findMany();
     const keyboard = new InlineKeyboard();
-    
+
     categories.forEach((cat) => {
       keyboard.text(`🧪 ${cat.name}`, `cat_${cat.id}`).row();
     });
-    
+
     keyboard.text("⬅️ Back to Main Menu", "main_menu");
 
     await ctx.editMessageText("Select a Chemical Category:", { reply_markup: keyboard });
     await ctx.answerCallbackQuery();
   });
 
-  // Category Products List
   bot.callbackQuery(/^cat_(.+)$/, async (ctx) => {
     const catId = ctx.match[1];
     const category = await prisma.category.findUnique({
@@ -159,24 +151,29 @@ export function createTelegramBot(token: string, botName: string) {
       include: {
         products: {
           include: {
-            items: { where: { isAllocated: false } }
-          }
-        }
-      }
+            items: { where: { isAllocated: false } },
+          },
+        },
+      },
     });
 
-    if (!category) return;
+    if (!category) {
+      await ctx.answerCallbackQuery({ text: "Category not found", show_alert: true });
+      return;
+    }
 
     const keyboard = new InlineKeyboard();
-    let text = `🧪 *${category.name} Catalog*:\n\n`;
+    let text = `🧪 *${esc(category.name)} Catalog*:\n\n`;
 
     category.products.forEach((prod) => {
       const stockCount = prod.items.length;
       const state = getStockState(stockCount);
-      text += `• *${prod.name}* (${prod.formula || ""})\n  Price: $${prod.price.toFixed(2)} | Stock: ${state.replace("_", " ")}\n\n`;
-      
+      text +=
+        `• *${esc(prod.name)}* (${esc(prod.formula || "")})\n` +
+        `  Price: $${prod.price.toFixed(2)} | Stock: ${state.replace(/_/g, " ")}\n\n`;
+
       if (stockCount > 0) {
-        keyboard.text(`Order ${prod.name}`, `buy_${prod.id}`).row();
+        keyboard.text(`Order ${prod.name}`.slice(0, 64), `buy_${prod.id}`).row();
       }
     });
 
@@ -191,61 +188,64 @@ export function createTelegramBot(token: string, botName: string) {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
     const user = await getUserByTelegram(telegramId);
-    if (!user) return;
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
 
     const productId = ctx.match[1];
     const product = await prisma.product.findUnique({ where: { id: productId } });
-    if (!product) return;
+    if (!product) {
+      await ctx.answerCallbackQuery({ text: "Product not found", show_alert: true });
+      return;
+    }
 
     try {
       const order = await prisma.$transaction(async (tx) => {
         const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
         if (!wallet || wallet.balance < product.price) {
-          throw new Error(`Insufficient wallet balance.\n\nPlease log in to our website to pay directly with Crypto (BTC, ETH, USDT, SOL, TRX) or to deposit funds.`);
+          throw new Error(
+            `Insufficient wallet balance.\n\nPlease log in to our website to pay directly with Crypto (BTC, ETH, USDT, SOL, TRX) or to deposit funds.`
+          );
         }
 
         const item = await tx.inventoryItem.findFirst({
           where: { productId, isAllocated: false },
-          orderBy: { createdAt: "asc" }
+          orderBy: { createdAt: "asc" },
         });
 
         if (!item) {
           throw new Error("This compound is currently out of stock.");
         }
 
-        // Deduct
         await tx.wallet.update({
           where: { id: wallet.id },
-          data: { balance: { decrement: product.price } }
+          data: { balance: { decrement: product.price } },
         });
 
-        // Ledger
         await tx.walletLedger.create({
           data: {
             walletId: wallet.id,
             type: "PURCHASE",
             amount: -product.price,
             description: `Telegram Bot Order: ${product.name}`,
-          }
+          },
         });
 
-        // Allocate
         await tx.inventoryItem.update({
           where: { id: item.id },
-          data: { isAllocated: true, allocatedAt: new Date() }
+          data: { isAllocated: true, allocatedAt: new Date() },
         });
 
-        // Recalculate
         const unallocatedCount = await tx.inventoryItem.count({
-          where: { productId, isAllocated: false }
+          where: { productId, isAllocated: false },
         });
 
         await tx.product.update({
           where: { id: productId },
-          data: { stockState: getStockState(unallocatedCount) }
+          data: { stockState: getStockState(unallocatedCount) },
         });
 
-        // Order
         return tx.order.create({
           data: {
             userId: user.id,
@@ -253,10 +253,10 @@ export function createTelegramBot(token: string, botName: string) {
             inventoryItemId: item.id,
             amountPaid: product.price,
             status: "COOLDOWN_ACTIVE",
-            cooldownEndAt: new Date(Date.now() + 30 * 1000), // 30s cooldown
+            cooldownEndAt: new Date(Date.now() + 30 * 1000),
             orderSource: "TELEGRAM",
             paymentMethod: "WALLET",
-          }
+          },
         });
       });
 
@@ -266,15 +266,17 @@ export function createTelegramBot(token: string, botName: string) {
         .text("⬅️ Back to Shop", "shop_categories");
 
       await ctx.editMessageText(
-        `✅ *Order Placed!* \n\n` +
-        `Order ID: \`${order.id}\`\n` +
-        `Compound: *${product.name}*\n` +
-        `Paid: *$${product.price.toFixed(2)}* (from Wallet)\n\n` +
-        `⚠️ *Order Cooldown is Active.* Your pickup details will be generated in 30 seconds.`,
+        `✅ *Order Placed!*\n\n` +
+          `Order ID: \`${order.id}\`\n` +
+          `Compound: *${esc(product.name)}*\n` +
+          `Paid: *$${product.price.toFixed(2)}* (from Wallet)\n\n` +
+          `⚠️ *Order Cooldown is Active.* Your pickup details will be generated in 30 seconds.`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
-    } catch (e: any) {
-      await ctx.answerCallbackQuery({ text: `❌ ${e.message || "Checkout failed"}`, show_alert: true });
+      await ctx.answerCallbackQuery({ text: "Order placed!" });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Checkout failed";
+      await ctx.answerCallbackQuery({ text: `❌ ${message}`.slice(0, 200), show_alert: true });
     }
   });
 
@@ -283,30 +285,40 @@ export function createTelegramBot(token: string, botName: string) {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
     const user = await getUserByTelegram(telegramId);
-    if (!user) return;
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
+    if (!user.wallet) {
+      await ctx.answerCallbackQuery({ text: "No wallet found for this account.", show_alert: true });
+      return;
+    }
 
     const ledgers = await prisma.walletLedger.findMany({
-      where: { walletId: user.wallet?.id },
+      where: { walletId: user.wallet.id },
       orderBy: { createdAt: "desc" },
-      take: 5
+      take: 5,
     });
 
-    let text = 
+    let text =
       `💳 *Wallet Information*\n\n` +
-      `Current Balance: *$${user.wallet?.balance.toFixed(2)}*\n\n` +
+      `Current Balance: *$${(user.wallet?.balance ?? 0).toFixed(2)}*\n\n` +
       `*Recent Ledger History*:\n`;
 
     if (ledgers.length === 0) {
       text += `_No recent wallet actions recorded._`;
     } else {
       ledgers.forEach((log) => {
-        text += `• ${log.type === "DEPOSIT" || log.type === "REFUND" ? "🟢" : "🔴"} *${log.type}*: ${log.amount > 0 ? "+" : ""}$${log.amount.toFixed(2)} (${log.description})\n`;
+        const sign = log.amount > 0 ? "+" : "";
+        text +=
+          `• ${log.type === "DEPOSIT" || log.type === "REFUND" ? "🟢" : "🔴"} ` +
+          `*${esc(log.type)}*: ${sign}$${log.amount.toFixed(2)} (${esc(log.description)})\n`;
       });
     }
 
     text += `\n\nℹ️ *To deposit funds using Crypto (BTC, ETH, SOL, etc.), please log in to our website.*`;
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/^["']|["']$/g, "");
     const keyboard = new InlineKeyboard()
       .url("🌐 Visit Website to Deposit", siteUrl)
       .row()
@@ -321,13 +333,16 @@ export function createTelegramBot(token: string, botName: string) {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
     const user = await getUserByTelegram(telegramId);
-    if (!user) return;
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
 
     const orders = await prisma.order.findMany({
       where: { userId: user.id },
       include: { product: true },
       orderBy: { createdAt: "desc" },
-      take: 6
+      take: 6,
     });
 
     let text = `📦 *Your Active & Past Orders*:\n\n`;
@@ -337,10 +352,9 @@ export function createTelegramBot(token: string, botName: string) {
       text += `_No orders found. Buy chemical compounds in the Shop._`;
     } else {
       orders.forEach((o) => {
-        text += `• *Order #${o.id.substring(0,8)}...* - ${o.product.name} (${o.status})\n`;
-        keyboard.text(`View #${o.id.substring(0,8)}`, `order_${o.id}`);
+        text += `• *Order #${o.id.substring(0, 8)}...* - ${esc(o.product.name)} (${esc(o.status)})\n`;
+        keyboard.text(`View #${o.id.substring(0, 8)}`, `order_${o.id}`).row();
       });
-      keyboard.row();
     }
 
     keyboard.text("⬅️ Back to Main Menu", "main_menu");
@@ -349,45 +363,54 @@ export function createTelegramBot(token: string, botName: string) {
     await ctx.answerCallbackQuery();
   });
 
-  // View specific order details
+  // View specific order details (ownership required)
   bot.callbackQuery(/^order_(.+)$/, async (ctx) => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+    const user = await getUserByTelegram(telegramId);
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
+
     const orderId = ctx.match[1];
     let order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { product: true, inventoryItem: true }
+      include: { product: true, inventoryItem: true },
     });
 
-    if (!order) return;
+    if (!order || order.userId !== user.id) {
+      await ctx.answerCallbackQuery({ text: "Order not found", show_alert: true });
+      return;
+    }
 
-    // Check if cooldown has expired and update status
     if (order.status === "COOLDOWN_ACTIVE" && order.cooldownEndAt) {
-      const now = new Date();
-      if (now >= order.cooldownEndAt) {
+      if (new Date() >= order.cooldownEndAt) {
         order = await prisma.order.update({
           where: { id: orderId },
           data: { status: "READY" },
-          include: { product: true, inventoryItem: true }
+          include: { product: true, inventoryItem: true },
         });
       }
     }
 
-    let text = 
+    let text =
       `📦 *Order Details*\n\n` +
-      `Product: *${order.product.name}*\n` +
+      `Product: *${esc(order.product.name)}*\n` +
       `Value: *$${order.amountPaid.toFixed(2)}*\n` +
-      `Status: *${order.status}*\n\n`;
+      `Status: *${esc(order.status)}*\n\n`;
 
     const keyboard = new InlineKeyboard();
 
     if (order.status === "COOLDOWN_ACTIVE") {
       const secLeft = Math.max(0, Math.ceil((new Date(order.cooldownEndAt!).getTime() - Date.now()) / 1000));
-      text += `⚠️ *Cooldown Timer Active.*\nEstimated delivery details in: *${secLeft} seconds*.\nRefresh the page using the button below.`;
+      text += `⚠️ *Cooldown Timer Active.*\nEstimated delivery details in: *${secLeft} seconds*.\nRefresh using the button below.`;
       keyboard.text("🔄 Refresh Status", `order_${order.id}`).row();
     } else if (order.status === "READY" || order.status === "COMPLETED") {
       text += `📍 *FIFO Batch Pickup Details*:\n`;
-      text += `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data}\`\n`;
+      text += `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data ?? "N/A"}\`\n`;
       text += `📌 *Coordinates/Location:* \`${order.inventoryItem?.locationData || "N/A"}\`\n`;
-      
+
       if (order.status === "READY") {
         keyboard.text("✅ Confirm Collection (Complete)", `complete_${order.id}`).row();
       }
@@ -401,51 +424,69 @@ export function createTelegramBot(token: string, botName: string) {
     await ctx.answerCallbackQuery();
   });
 
-  // Action: Complete Order from Telegram
+  // Complete Order — ownership required
   bot.callbackQuery(/^complete_(.+)$/, async (ctx) => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+    const user = await getUserByTelegram(telegramId);
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
+
     const orderId = ctx.match[1];
-    
+    const existing = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!existing || existing.userId !== user.id) {
+      await ctx.answerCallbackQuery({ text: "Order not found", show_alert: true });
+      return;
+    }
+    if (existing.status !== "READY") {
+      await ctx.answerCallbackQuery({ text: "Order is not ready to complete", show_alert: true });
+      return;
+    }
+
     await prisma.order.update({
       where: { id: orderId },
-      data: { status: "COMPLETED" }
+      data: { status: "COMPLETED" },
     });
 
     await ctx.answerCallbackQuery({ text: "🎉 Order marked as Completed!" });
-    
-    // Refresh view
+
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { product: true, inventoryItem: true }
+      include: { product: true, inventoryItem: true },
     });
 
     if (!order) return;
 
-    const text = 
+    const text =
       `📦 *Order Details*\n\n` +
-      `Product: *${order.product.name}*\n` +
+      `Product: *${esc(order.product.name)}*\n` +
       `Value: *$${order.amountPaid.toFixed(2)}*\n` +
-      `Status: *${order.status}*\n\n` +
+      `Status: *${esc(order.status)}*\n\n` +
       `📍 *FIFO Batch Pickup Details*:\n` +
-      `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data}\`\n` +
+      `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data ?? "N/A"}\`\n` +
       `📌 *Coordinates/Location:* \`${order.inventoryItem?.locationData || "N/A"}\`\n`;
 
-    const keyboard = new InlineKeyboard()
-      .text("⬅️ Back to Orders List", "orders_menu");
+    const keyboard = new InlineKeyboard().text("⬅️ Back to Orders List", "orders_menu");
 
     await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
   });
 
-  // 5. Disputes Menu list
+  // 5. Disputes Menu
   bot.callbackQuery("disputes_menu", async (ctx) => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return;
     const user = await getUserByTelegram(telegramId);
-    if (!user) return;
+    if (!user) {
+      await ctx.answerCallbackQuery({ text: "Please /start and link your account first.", show_alert: true });
+      return;
+    }
 
     const disputes = await prisma.dispute.findMany({
       where: { userId: user.id },
       include: { order: { include: { product: true } } },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
     });
 
     let text = `⚖️ *Your Disputes tickets*:\n\n`;
@@ -454,16 +495,15 @@ export function createTelegramBot(token: string, botName: string) {
       text += `_No disputes submitted._`;
     } else {
       disputes.forEach((d) => {
-        text += `• *Dispute for ${d.order.product.name}* - [${d.status}]\n  Claim: "${d.reason}"\n`;
-        if (d.status === "RESOLVED") {
-          text += `  Resolution: *${d.resolutionType}*\n`;
+        text += `• *Dispute for ${esc(d.order.product.name)}* - [${esc(d.status)}]\n  Claim: "${esc(d.reason)}"\n`;
+        if (d.status === "RESOLVED" && d.resolutionType) {
+          text += `  Resolution: *${esc(d.resolutionType)}*\n`;
         }
         text += `\n`;
       });
     }
 
-    const keyboard = new InlineKeyboard()
-      .text("⬅️ Back to Main Menu", "main_menu");
+    const keyboard = new InlineKeyboard().text("⬅️ Back to Main Menu", "main_menu");
 
     await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
     await ctx.answerCallbackQuery();
@@ -479,7 +519,6 @@ export function createTelegramBot(token: string, botName: string) {
 
     const text = ctx.message.text.trim();
 
-    // Cancel command
     if (text === "/cancel") {
       userStates.delete(telegramId);
       await ctx.reply("❌ Authentication cancelled. Type /start to try again.");
@@ -487,14 +526,13 @@ export function createTelegramBot(token: string, botName: string) {
     }
 
     if (state.step === "CAPTCHA") {
-      const answer = parseInt(text);
+      const answer = parseInt(text, 10);
       if (isNaN(answer) || answer !== state.captchaAnswer) {
         userStates.delete(telegramId);
         await ctx.reply("❌ Incorrect CAPTCHA verification. Authentication cancelled. Type /start to try again.");
         return;
       }
-      
-      // Captcha verification passed, proceed to Username
+
       userStates.set(telegramId, { ...state, step: "USERNAME" });
       if (state.action === "LOGIN") {
         await ctx.reply("🔑 Please enter your website Username:");
@@ -528,7 +566,17 @@ export function createTelegramBot(token: string, botName: string) {
           return;
         }
 
-        // Link this Telegram account
+        const linkedElsewhere = await prisma.user.findUnique({
+          where: { telegramId: String(telegramId) },
+        });
+        if (linkedElsewhere && linkedElsewhere.id !== user.id) {
+          userStates.delete(telegramId);
+          await ctx.reply(
+            "❌ This Telegram account is already linked to a different website user. Unlink it from the dashboard first, then try again."
+          );
+          return;
+        }
+
         await prisma.user.update({
           where: { id: user.id },
           data: {
@@ -538,7 +586,9 @@ export function createTelegramBot(token: string, botName: string) {
         });
 
         userStates.delete(telegramId);
-        await ctx.reply("✅ Success! Your Telegram account has been linked to your website profile. Type /start to open the Shop!");
+        await ctx.reply(
+          "✅ Success! Your Telegram account has been linked to your website profile. Type /start to open the Shop!"
+        );
       }
     } else if (state.action === "SIGNUP") {
       if (state.step === "USERNAME") {
@@ -558,6 +608,17 @@ export function createTelegramBot(token: string, botName: string) {
       } else if (state.step === "PASSWORD") {
         if (text.length < 6) {
           await ctx.reply("❌ Password must be at least 6 characters. Please enter your password again:");
+          return;
+        }
+
+        const alreadyLinked = await prisma.user.findUnique({
+          where: { telegramId: String(telegramId) },
+        });
+        if (alreadyLinked) {
+          userStates.delete(telegramId);
+          await ctx.reply(
+            "❌ This Telegram account is already linked. Type /start to open the shop, or link a different account from the website."
+          );
           return;
         }
 
@@ -586,7 +647,9 @@ export function createTelegramBot(token: string, botName: string) {
         });
 
         userStates.delete(telegramId);
-        await ctx.reply("🎉 Account successfully registered and linked! You can now access all services. Type /start to open the Shop!");
+        await ctx.reply(
+          "🎉 Account successfully registered and linked! You can now access all services. Type /start to open the Shop!"
+        );
       }
     }
   });

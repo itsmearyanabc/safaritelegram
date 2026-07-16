@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getStockState } from "@/lib/stock";
 
-// Helper to determine stock state based on remaining item count
-export function getStockState(count: number): string {
-  if (count === 0) return "OUT_OF_STOCK";
-  if (count <= 2) return "CRITICAL_STOCK";
-  if (count <= 5) return "LOW_STOCK";
-  return "IN_STOCK";
-}
 
 export async function GET() {
   try {

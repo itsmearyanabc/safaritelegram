@@ -105,10 +105,10 @@ export default function ClientAdminPanel() {
     })();
   }, []);
 
-  const handleSendMessage = async (orderId: string) => {
-    const message = adminMessages[orderId];
+  const handleSendMessage = async (orderId: string, fallbackMessage?: string) => {
+    const message = (adminMessages[orderId] ?? fallbackMessage ?? "").trim();
     if (!message) return;
-    
+
     setMsg(null);
     try {
       const res = await fetch("/api/client-admin/orders/send-message", {
@@ -117,7 +117,17 @@ export default function ClientAdminPanel() {
       });
       const data = await res.json();
       if (!res.ok) { setMsg({ type: "error", text: data.error }); return; }
-      setMsg({ type: "success", text: "Message sent and coordinates updated!" });
+
+      if (data.telegramSent) {
+        setMsg({ type: "success", text: "Message saved and delivered to Telegram!" });
+      } else if (data.telegramError) {
+        setMsg({
+          type: "error",
+          text: `Message saved in DB, but Telegram failed: ${data.telegramError}`,
+        });
+      } else {
+        setMsg({ type: "success", text: "Message saved and order updated!" });
+      }
       fetchAll();
       setAdminMessages(prev => ({ ...prev, [orderId]: "" }));
     } catch (e) {
@@ -639,7 +649,7 @@ export default function ClientAdminPanel() {
                                     ? "Will be sent directly to their Telegram" 
                                     : "Will appear on their website dashboard"}
                                 </span>
-                                <button onClick={() => handleSendMessage(order.id)} className="btn btn-primary" disabled={!adminMessages[order.id] && !order.adminMessage}>
+                                <button onClick={() => handleSendMessage(order.id, order.adminMessage || undefined)} className="btn btn-primary" disabled={!(adminMessages[order.id] ?? order.adminMessage)?.trim()}>
                                   Send Coordinates
                                 </button>
                               </div>

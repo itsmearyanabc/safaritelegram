@@ -52,6 +52,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Username is already taken" }, { status: 400 });
     }
 
+    if (telegramId) {
+      const existingTelegram = await prisma.user.findUnique({
+        where: { telegramId: String(telegramId) },
+      });
+      if (existingTelegram) {
+        return NextResponse.json(
+          { error: "This Telegram ID is already linked to another account." },
+          { status: 400 }
+        );
+      }
+    }
+
     // 4. Hash password
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
