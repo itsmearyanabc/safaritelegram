@@ -15,6 +15,15 @@ const userStates = new Map<number, AuthState>();
 export function createTelegramBot(token: string, botName: string) {
   const bot = new Bot(token);
 
+  // Global error handler — keeps the bot alive on errors
+  bot.catch((err) => {
+    const ctx = err.ctx;
+    const e = err.error;
+    // Attempt to notify the user
+    try {
+      ctx.reply("⚠️ Something went wrong. Please try again later or type /start.").catch(() => {});
+    } catch {}
+  });
   // Helper: Find or verify user by Telegram ID
   async function getUserByTelegram(telegramId: number) {
     return prisma.user.findUnique({

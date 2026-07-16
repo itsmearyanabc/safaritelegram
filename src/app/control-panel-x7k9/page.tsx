@@ -52,10 +52,10 @@ export default function ClientAdminPanel() {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
-      if (!data.user) { router.push("/control-panel-x7k9/login"); return; }
+      if (!data.user) { router.push("/auth/login"); return; }
       if (!["ADMIN", "SUPERADMIN"].includes(data.user.role)) { router.push("/dashboard"); return; }
       setUser(data.user);
-    } catch { router.push("/control-panel-x7k9/login"); }
+    } catch { router.push("/auth/login"); }
   };
 
   const fetchAll = async () => {

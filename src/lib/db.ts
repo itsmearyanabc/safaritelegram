@@ -8,7 +8,10 @@ let prisma: PrismaClient;
 if (globalForPrisma.prisma) {
   prisma = globalForPrisma.prisma;
 } else {
-  const connectionString = process.env.DATABASE_URL || "postgres://dummy:dummy@localhost:5432/dummy";
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL environment variable is not set. Please configure your PostgreSQL connection string.");
+  }
 
   const adapter = new PrismaPg({ connectionString });
   prisma = new PrismaClient({ adapter });
