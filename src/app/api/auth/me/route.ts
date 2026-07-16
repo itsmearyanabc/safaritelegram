@@ -44,8 +44,7 @@ export async function GET() {
         },
       },
     });
-  } catch (error) {
-    console.error("Fetch current user error:", error);
-    return NextResponse.json({ error: "Internal server error fetching user session" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

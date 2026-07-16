@@ -60,10 +60,27 @@ export default function Dashboard() {
   const [pwMsg, setPwMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [pwLoading, setPwLoading] = useState(false);
 
+  // Telegram settings state
+  const [tgIdInput, setTgIdInput] = useState("");
+  const [tgUsernameInput, setTgUsernameInput] = useState("");
+  const [tgMsg, setTgMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [tgLoading, setTgLoading] = useState(false);
+
   // Crypto Modal State
   const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
   const [selectedProductForCrypto, setSelectedProductForCrypto] = useState<string | null>(null);
-  const [cryptoCurrency, setCryptoCurrency] = useState<"BTC" | "ETH">("BTC");
+  const [cryptoCurrency, setCryptoCurrency] = useState("BTC");
+  const [cryptoPaymentInfo, setCryptoPaymentInfo] = useState<any>(null);
+  const [cryptoStep, setCryptoStep] = useState<"select" | "pay">("select");
+
+  const cryptoOptions = [
+    { code: "BTC", label: "Bitcoin (BTC)", icon: "₿" },
+    { code: "ETH", label: "Ethereum (ETH)", icon: "Ξ" },
+    { code: "USDT_ERC20", label: "USDT (ERC-20)", icon: "₮" },
+    { code: "USDT_TRC20", label: "USDT (TRC-20)", icon: "₮" },
+    { code: "SOL", label: "Solana (SOL)", icon: "◎" },
+    { code: "TRX", label: "Tron (TRX)", icon: "⟐" },
+  ];
 
   const checkSession = async () => {
     try {
@@ -88,6 +105,13 @@ export default function Dashboard() {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setTgIdInput(user.telegramId || "");
+      setTgUsernameInput(user.telegramUsername || "");
+    }
+  }, [user]);
 
   // Poll cooldowns
   useEffect(() => {
@@ -148,6 +172,32 @@ export default function Dashboard() {
     setPwLoading(false);
   };
 
+  const handleTelegramSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTgMsg(null);
+    setTgLoading(true);
+    try {
+      const res = await fetch("/api/auth/update-telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telegramId: tgIdInput.trim() || null,
+          telegramUsername: tgUsernameInput.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTgMsg({ type: "error", text: data.error || "Failed to update Telegram details" });
+      } else {
+        setTgMsg({ type: "success", text: "Telegram settings updated successfully!" });
+        await checkSession();
+      }
+    } catch {
+      setTgMsg({ type: "error", text: "An error occurred" });
+    }
+    setTgLoading(false);
+  };
+
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault(); setWalletMessage("");
     try {
@@ -182,12 +232,17 @@ export default function Dashboard() {
       const r = await fetch("/api/orders/crypto-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: selectedProductForCrypto, cryptoCurrency }) });
       const d = await r.json();
       if (!r.ok) { setShopMsg({ type: "error", text: d.error || "Purchase failed" }); setCryptoModalOpen(false); return; }
-      setShopMsg({ type: "success", text: `Crypto order created! Please complete payment.` });
-      setCryptoModalOpen(false);
-      if (d.hostedUrl) window.open(d.hostedUrl, "_blank");
+      setCryptoPaymentInfo(d.order);
+      setCryptoStep("pay");
       loadShopData(); loadOrdersData();
-      setActiveTab("orders");
     } catch { setShopMsg({ type: "error", text: "Error processing crypto purchase" }); }
+  };
+
+  const handleCryptoModalClose = () => {
+    setCryptoModalOpen(false);
+    setCryptoStep("select");
+    setCryptoPaymentInfo(null);
+    setSelectedProductForCrypto(null);
   };
 
   const checkOrderStatus = async (orderId: string) => {
@@ -394,31 +449,81 @@ export default function Dashboard() {
                   background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
                   backdropFilter: "blur(4px)"
                 }}>
-                  <div className="card" style={{ width: "100%", maxWidth: "400px", background: "var(--bg-primary)" }}>
-                    <h3 style={{ marginBottom: "16px" }}>Select Cryptocurrency</h3>
-                    <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "20px" }}>
-                      Choose which cryptocurrency you want to use for this direct payment via Coinbase Commerce.
-                    </p>
-                    <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
-                      <button 
-                        onClick={() => setCryptoCurrency("BTC")}
-                        className={`btn ${cryptoCurrency === "BTC" ? "btn-primary" : "btn-secondary"}`}
-                        style={{ flex: 1 }}
-                      >
-                        Bitcoin (BTC)
-                      </button>
-                      <button 
-                        onClick={() => setCryptoCurrency("ETH")}
-                        className={`btn ${cryptoCurrency === "ETH" ? "btn-primary" : "btn-secondary"}`}
-                        style={{ flex: 1 }}
-                      >
-                        Ethereum (ETH)
-                      </button>
-                    </div>
-                    <div style={{ display: "flex", gap: "12px" }}>
-                      <button onClick={handleCryptoBuy} className="btn btn-primary" style={{ flex: 1 }}>Proceed</button>
-                      <button onClick={() => setCryptoModalOpen(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
-                    </div>
+                  <div className="card" style={{ width: "100%", maxWidth: "480px", background: "var(--bg-primary)" }}>
+                    {cryptoStep === "select" ? (
+                      <>
+                        <h3 style={{ marginBottom: "8px" }}>Select Cryptocurrency</h3>
+                        <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                          Choose which cryptocurrency to pay with. Network fees are borne by the sender.
+                        </p>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
+                          {cryptoOptions.map(opt => (
+                            <button
+                              key={opt.code}
+                              onClick={() => setCryptoCurrency(opt.code)}
+                              className={`btn ${cryptoCurrency === opt.code ? "btn-primary" : "btn-secondary"}`}
+                              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px", padding: "12px 8px" }}
+                            >
+                              <span style={{ fontSize: "16px" }}>{opt.icon}</span> {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: "12px" }}>
+                          <button onClick={handleCryptoBuy} className="btn btn-primary" style={{ flex: 1 }}>Proceed</button>
+                          <button onClick={handleCryptoModalClose} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+                        </div>
+                      </>
+                    ) : cryptoPaymentInfo ? (
+                      <>
+                        <h3 style={{ marginBottom: "8px" }}>💰 Send Payment</h3>
+                        <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                          Send the exact amount to the address below. Your order will be confirmed once the admin verifies the transaction on-chain.
+                        </p>
+
+                        <div style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-md)", padding: "16px", marginBottom: "16px", border: "1px solid var(--border)" }}>
+                          <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px", textTransform: "uppercase", fontWeight: "600" }}>Product</p>
+                          <p style={{ fontWeight: "600", marginBottom: "12px" }}>{cryptoPaymentInfo.productName}</p>
+
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                            <div>
+                              <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Order Amount</p>
+                              <p style={{ fontWeight: "600", color: "var(--green)" }}>${cryptoPaymentInfo.amountPaid.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Network Fee (est.)</p>
+                              <p style={{ fontWeight: "600", color: "var(--orange)" }}>${cryptoPaymentInfo.networkFee.toFixed(2)}</p>
+                            </div>
+                          </div>
+
+                          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+                            <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Total Payable ({cryptoPaymentInfo.cryptoName})</p>
+                            <p style={{ fontWeight: "800", fontSize: "20px", color: "var(--accent)" }}>${cryptoPaymentInfo.totalDue.toFixed(2)} <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "400" }}>in {cryptoPaymentInfo.cryptoName}</span></p>
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: "20px" }}>
+                          <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "6px", textTransform: "uppercase", fontWeight: "600" }}>
+                            Send {cryptoPaymentInfo.cryptoName} to this address ({cryptoPaymentInfo.network} network)
+                          </p>
+                          <div style={{
+                            background: "var(--bg-secondary)", padding: "12px", borderRadius: "var(--radius-sm)",
+                            fontFamily: "monospace", fontSize: "13px", border: "1px solid var(--border)",
+                            wordBreak: "break-all", userSelect: "all",
+                          }}>
+                            {cryptoPaymentInfo.walletAddress}
+                          </div>
+                        </div>
+
+                        <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "16px" }}>
+                          ⚠️ Send the exact amount in {cryptoPaymentInfo.cryptoName}. Network fees are your responsibility. Once you send payment, the admin will verify the blockchain transaction and process your order.
+                        </p>
+
+                        <div style={{ display: "flex", gap: "12px" }}>
+                          <button onClick={() => { handleCryptoModalClose(); setActiveTab("orders"); }} className="btn btn-primary" style={{ flex: 1 }}>I Have Paid</button>
+                          <button onClick={handleCryptoModalClose} className="btn btn-ghost" style={{ flex: 1 }}>Close</button>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -948,6 +1053,97 @@ export default function Dashboard() {
                     {pwLoading ? "Changing..." : "Change Password"}
                   </button>
                 </form>
+              </div>
+
+              {/* Telegram Settings */}
+              <div className="card" style={{ marginTop: "24px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+                  <span style={{ fontSize: "24px" }}>🤖</span>
+                  <div>
+                    <h3 style={{ marginBottom: "2px" }}>Telegram Integration</h3>
+                    <p style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>Link your Telegram account to access the 24/7 shop bot and receive order updates</p>
+                  </div>
+                </div>
+
+                {tgMsg && (
+                  <div className={`alert ${tgMsg.type === "error" ? "alert-error" : "alert-success"}`} style={{ marginBottom: "20px" }}>
+                    {tgMsg.text}
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", alignItems: "start" }}>
+                  <form onSubmit={handleTelegramSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" htmlFor="telegram-username">Telegram Username</label>
+                      <div style={{ position: "relative" }}>
+                        <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }}>@</span>
+                        <input
+                          id="telegram-username"
+                          type="text"
+                          className="form-input"
+                          value={tgUsernameInput}
+                          onChange={(e) => setTgUsernameInput(e.target.value)}
+                          placeholder="username"
+                          style={{ paddingLeft: "28px" }}
+                        />
+                      </div>
+                      <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>Your public Telegram handle (without @)</p>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" htmlFor="telegram-id">Telegram User ID</label>
+                      <input
+                        id="telegram-id"
+                        type="text"
+                        className="form-input"
+                        value={tgIdInput}
+                        onChange={(e) => setTgIdInput(e.target.value)}
+                        placeholder="e.g. 123456789"
+                      />
+                      <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                        Numeric Telegram ID. Get it by sending a message to <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>@userinfobot</a>
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={tgLoading}
+                      style={{ width: "fit-content", marginTop: "8px" }}
+                    >
+                      {tgLoading ? "Saving..." : "Save Telegram Settings"}
+                    </button>
+                  </form>
+
+                  <div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                    <h4 style={{ marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span>🚀</span> How to Connect
+                    </h4>
+                    <ol style={{ fontSize: "13px", color: "var(--text-secondary)", paddingLeft: "20px", margin: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <li>
+                        Open the Telegram app and search for <strong>@{BOT_USERNAME}</strong> or click the button below.
+                      </li>
+                      <li>
+                        Start a chat with the bot by clicking the <strong>Start</strong> button or sending <code>/start</code>.
+                      </li>
+                      <li>
+                        Enter your Telegram details on the left and save them.
+                      </li>
+                      <li>
+                        Use the bot menu to browse categories, buy compounds, and check your order history directly from Telegram!
+                      </li>
+                    </ol>
+                    <a
+                      href={`https://t.me/${BOT_USERNAME}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-secondary"
+                      style={{ width: "100%", marginTop: "20px", display: "inline-flex", justifyContent: "center", alignItems: "center", gap: "8px" }}
+                    >
+                      💬 Open Telegram Bot
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           )}

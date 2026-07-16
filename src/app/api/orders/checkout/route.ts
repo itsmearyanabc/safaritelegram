@@ -104,7 +104,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, order });
   } catch (error: any) {
-    console.error("Checkout error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error during checkout" }, { status: 500 });
+    const msg = error?.message || "";
+    const isUserError = msg.includes("Insufficient") || msg.includes("out of stock");
+    return NextResponse.json({ error: isUserError ? msg : "Checkout failed" }, { status: isUserError ? 400 : 500 });
   }
 }

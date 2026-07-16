@@ -66,8 +66,7 @@ export async function POST(req: Request) {
         telegramId: user.telegramId,
       },
     });
-  } catch (error: any) {
-    console.error("Login error:", error);
-    return NextResponse.json({ error: "Internal server error during login" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

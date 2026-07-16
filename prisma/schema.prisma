@@ -27,6 +27,7 @@ model Wallet {
   userId    String         @unique
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   balance   Float          @default(0.0)
+  currency  String         @default("USD")
   updatedAt DateTime       @updatedAt
   ledgers   WalletLedger[]
 }
@@ -37,6 +38,7 @@ model WalletLedger {
   wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   type        String   // DEPOSIT, PURCHASE, REFUND, CREDIT
   amount      Float
+  currency    String   @default("USD")
   description String
   createdAt   DateTime @default(now())
 }
@@ -56,6 +58,7 @@ model Product {
   name        String          @unique
   description String?
   price       Float
+  currency    String          @default("USD")
   formula     String?         // Chemical formula (e.g. NaCl, H2SO4)
   casNumber   String?         // CAS Registry Number for chemicals
   imageUrl    String?         // URL of the product picture
@@ -88,13 +91,17 @@ model Order {
   inventoryItemId String?
   inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
   amountPaid      Float
+  currency        String         @default("USD")
   status          String         @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAYMENT_CONFIRMING, PAID, COOLDOWN_ACTIVE, READY, COMPLETED, REFUNDED, FAILED
   cooldownEndAt   DateTime?
   orderSource     String         @default("WEBSITE") // WEBSITE, TELEGRAM
   adminMessage    String?
   adminMessageSentAt DateTime?
-  paymentMethod      String         @default("WALLET") // WALLET, DIRECT_CRYPTO
-  cryptoCurrency     String?        // BTC, ETH
+  paymentMethod      String         @default("DIRECT_CRYPTO") // WALLET, DIRECT_CRYPTO
+  cryptoCurrency     String?        // BTC, ETH, USDT_ERC20, USDT_TRC20, SOL, TRX
+  cryptoAmountDue    String?        // Amount customer must send in chosen coin
+  networkFee         Float?         // Estimated network fee in USD
+  paymentWalletAddress String?      // Specific address customer should pay to
   coinbaseChargeId   String?        
   coinbaseChargeUrl  String?
   createdAt          DateTime       @default(now())
@@ -131,4 +138,3 @@ model DepositRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-

@@ -155,7 +155,7 @@ export function createTelegramBot(token: string, botName: string) {
       const order = await prisma.$transaction(async (tx) => {
         const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
         if (!wallet || wallet.balance < product.price) {
-          throw new Error("Insufficient wallet balance.");
+          throw new Error(`Insufficient wallet balance.\n\nPlease log in to our website to pay directly with Crypto (BTC, ETH, USDT, SOL, TRX) or to deposit funds.`);
         }
 
         const item = await tx.inventoryItem.findFirst({
@@ -209,6 +209,7 @@ export function createTelegramBot(token: string, botName: string) {
             status: "COOLDOWN_ACTIVE",
             cooldownEndAt: new Date(Date.now() + 30 * 1000), // 30s cooldown
             orderSource: "TELEGRAM",
+            paymentMethod: "WALLET",
           }
         });
       });
@@ -222,7 +223,7 @@ export function createTelegramBot(token: string, botName: string) {
         `✅ *Order Placed!* \n\n` +
         `Order ID: \`${order.id}\`\n` +
         `Compound: *${product.name}*\n` +
-        `Paid: *$${product.price.toFixed(2)}*\n\n` +
+        `Paid: *$${product.price.toFixed(2)}* (from Wallet)\n\n` +
         `⚠️ *Order Cooldown is Active.* Your pickup details will be generated in 30 seconds.`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
@@ -257,60 +258,16 @@ export function createTelegramBot(token: string, botName: string) {
       });
     }
 
+    text += `\n\nℹ️ *To deposit funds using Crypto (BTC, ETH, SOL, etc.), please log in to our website.*`;
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
     const keyboard = new InlineKeyboard()
-      .text("💵 Deposit $50", "dep_50")
-      .text("💵 Deposit $100", "dep_100")
-      .row()
-      .text("💵 Deposit $250", "dep_250")
+      .url("🌐 Visit Website to Deposit", siteUrl)
       .row()
       .text("⬅️ Back to Main Menu", "main_menu");
 
     await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
     await ctx.answerCallbackQuery();
-  });
-
-  // Request Deposit Action
-  bot.callbackQuery(/^dep_(.+)$/, async (ctx) => {
-    const telegramId = ctx.from?.id;
-    if (!telegramId) return;
-    const user = await getUserByTelegram(telegramId);
-    if (!user) return;
-
-    const amount = parseFloat(ctx.match[1]);
-    if (isNaN(amount) || amount <= 0) return;
-
-    try {
-      // Get crypto address from Settings
-      const walletSetting = await prisma.setting.findUnique({
-        where: { key: "CRYPTO_WALLET_ADDRESS" },
-      });
-      const cryptoAddress = walletSetting?.value || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
-
-      // Create pending deposit request
-      await prisma.depositRequest.create({
-        data: {
-          userId: user.id,
-          amount: amount,
-          status: "PENDING",
-        },
-      });
-
-      const text =
-        `💵 *Deposit Request Initiated*\n\n` +
-        `Amount: *$${amount.toFixed(2)}*\n` +
-        `Status: *PENDING verification*\n\n` +
-        `Please send exactly *$${amount.toFixed(2)}* to the wallet address below:\n\n` +
-        `\`${cryptoAddress}\`\n\n` +
-        `⚠️ Once you transfer the funds, our administrator will verify the blockchain and approve the credit to your wallet balance.`;
-
-      const keyboard = new InlineKeyboard()
-        .text("💳 Wallet Menu", "wallet_menu")
-        .text("⬅️ Main Menu", "main_menu");
-
-      await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
-    } catch (e: any) {
-      await ctx.answerCallbackQuery({ text: `❌ Failed to create request: ${e.message}`, show_alert: true });
-    }
   });
 
   // 4. Orders Menu list

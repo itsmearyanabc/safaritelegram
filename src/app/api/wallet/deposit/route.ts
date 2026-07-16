@@ -21,8 +21,7 @@ export async function GET(req: NextRequest) {
     const cryptoAddress = walletSetting?.value || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
 
     return NextResponse.json({ requests, cryptoAddress });
-  } catch (error: any) {
-    console.error("Fetch deposit requests error:", error);
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -66,8 +65,7 @@ export async function POST(req: Request) {
         createdAt: depositRequest.createdAt,
       }
     });
-  } catch (error: any) {
-    console.error("Deposit request error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error during deposit request" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -95,8 +95,7 @@ export async function POST(req: Request) {
         telegramId: newUser.telegramId,
       },
     });
-  } catch (error: any) {
-    console.error("Registration error:", error);
-    return NextResponse.json({ error: "Internal server error during registration" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

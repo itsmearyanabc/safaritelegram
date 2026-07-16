@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 type Tab = "dashboard" | "products" | "active-orders" | "all-orders" | "users" | "payments" | "disputes";
@@ -33,8 +33,20 @@ export default function ClientAdminPanel() {
   // Product management UI states
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryDesc, setNewCategoryDesc] = useState("");
-  const [newProduct, setNewProduct] = useState({ name: "", description: "", price: "", formula: "", casNumber: "", categoryId: "", imageUrl: "" });
+  const [newProduct, setNewProduct] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", categoryId: "", imageUrl: "" });
   const [newInventory, setNewInventory] = useState({ productId: "", data: "", locationData: "" });
+
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editProductData, setEditProductData] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", imageUrl: "" });
+
+  const [cryptoSettings, setCryptoSettings] = useState({
+    WALLET_BTC: "", FEE_BTC: "0",
+    WALLET_ETH: "", FEE_ETH: "0",
+    WALLET_USDT_ERC20: "", FEE_USDT_ERC20: "0",
+    WALLET_USDT_TRC20: "", FEE_USDT_TRC20: "0",
+    WALLET_SOL: "", FEE_SOL: "0",
+    WALLET_TRX: "", FEE_TRX: "0"
+  });
 
   const checkSession = async () => {
     try {
@@ -66,7 +78,14 @@ export default function ClientAdminPanel() {
       if (usersData.users) setUsers(usersData.users);
       if (settingsData.settings) {
         setSettings(settingsData.settings);
-        setCryptoAddress(settingsData.settings["CRYPTO_WALLET_ADDRESS"] || "");
+        setCryptoSettings({
+          WALLET_BTC: settingsData.settings["WALLET_BTC"] || "", FEE_BTC: settingsData.settings["FEE_BTC"] || "0",
+          WALLET_ETH: settingsData.settings["WALLET_ETH"] || "", FEE_ETH: settingsData.settings["FEE_ETH"] || "0",
+          WALLET_USDT_ERC20: settingsData.settings["WALLET_USDT_ERC20"] || "", FEE_USDT_ERC20: settingsData.settings["FEE_USDT_ERC20"] || "0",
+          WALLET_USDT_TRC20: settingsData.settings["WALLET_USDT_TRC20"] || "", FEE_USDT_TRC20: settingsData.settings["FEE_USDT_TRC20"] || "0",
+          WALLET_SOL: settingsData.settings["WALLET_SOL"] || "", FEE_SOL: settingsData.settings["FEE_SOL"] || "0",
+          WALLET_TRX: settingsData.settings["WALLET_TRX"] || "", FEE_TRX: settingsData.settings["FEE_TRX"] || "0"
+        });
       }
       if (disputesData.disputes) setDisputes(disputesData.disputes);
       if (depositsData.deposits) setDeposits(depositsData.deposits);
@@ -126,15 +145,33 @@ export default function ClientAdminPanel() {
     e.preventDefault();
     setMsg(null);
     try {
-      const res = await fetch("/api/client-admin/settings", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "CRYPTO_WALLET_ADDRESS", value: cryptoAddress })
-      });
-      if (!res.ok) { setMsg({ type: "error", text: "Failed to update address" }); return; }
-      setMsg({ type: "success", text: "Crypto wallet address updated successfully!" });
+      const updates = Object.entries(cryptoSettings).map(([key, value]) =>
+        fetch("/api/client-admin/settings", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, value })
+        })
+      );
+      await Promise.all(updates);
+      setMsg({ type: "success", text: "Crypto configuration updated successfully!" });
       fetchAll();
     } catch (e) {
-      setMsg({ type: "error", text: "Failed to update address" });
+      setMsg({ type: "error", text: "Failed to update crypto configuration" });
+    }
+  };
+
+  const handleConfirmPayment = async (orderId: string) => {
+    setMsg(null);
+    try {
+      const res = await fetch("/api/client-admin/orders/confirm-payment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId })
+      });
+      const data = await res.json();
+      if (!res.ok) { setMsg({ type: "error", text: data.error || "Failed to confirm payment" }); return; }
+      setMsg({ type: "success", text: "Payment confirmed. Order moved to Cooldown." });
+      fetchAll();
+    } catch (e) {
+      setMsg({ type: "error", text: "Failed to confirm payment" });
     }
   };
 
@@ -176,12 +213,42 @@ export default function ClientAdminPanel() {
       });
       if (res.ok) {
         setMsg({ type: "success", text: "Product added!" });
-        setNewProduct({ name: "", description: "", price: "", formula: "", casNumber: "", categoryId: "", imageUrl: "" });
+        setNewProduct({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", categoryId: "", imageUrl: "" });
         fetchAll();
       } else {
         const d = await res.json(); setMsg({ type: "error", text: d.error });
       }
     } catch (e) { setMsg({ type: "error", text: "Error adding product" }); }
+  };
+
+  const startEditingProduct = (p: any) => {
+    setEditingProductId(p.id);
+    setEditProductData({
+      name: p.name,
+      description: p.description || "",
+      price: p.price.toString(),
+      currency: p.currency || "USD",
+      formula: p.formula || "",
+      casNumber: p.casNumber || "",
+      imageUrl: p.imageUrl || ""
+    });
+  };
+
+  const handleEditProductSubmit = async () => {
+    if (!editingProductId) return;
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...editProductData, productId: editingProductId, price: parseFloat(editProductData.price) })
+      });
+      if (res.ok) {
+        setMsg({ type: "success", text: "Product updated!" });
+        setEditingProductId(null);
+        fetchAll();
+      } else {
+        const d = await res.json(); setMsg({ type: "error", text: d.error });
+      }
+    } catch (e) { setMsg({ type: "error", text: "Error updating product" }); }
   };
 
   const handleDeleteProduct = async (productId: string) => {
@@ -425,16 +492,43 @@ export default function ClientAdminPanel() {
                   </thead>
                   <tbody>
                     {products.map(p => (
-                      <tr key={p.id}>
-                        <td><strong>{p.name}</strong></td>
-                        <td>{p.categoryName}</td>
-                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${p.price.toFixed(2)}</td>
-                        <td><span className={`badge badge-${p.stockState.toLowerCase()}`}>{p.stockState}</span></td>
-                        <td>{p.availableItems} / {p.totalItems}</td>
-                        <td>
-                          <button onClick={() => handleDeleteProduct(p.id)} className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }}>Delete</button>
-                        </td>
-                      </tr>
+                      <React.Fragment key={p.id}>
+                        <tr>
+                          <td><strong>{p.name}</strong></td>
+                          <td>{p.categoryName}</td>
+                          <td style={{ fontWeight: "600", color: "var(--green)" }}>{p.currency === "EUR" ? "€" : p.currency === "GBP" ? "£" : "$"}{p.price.toFixed(2)}</td>
+                          <td><span className={`badge badge-${p.stockState.toLowerCase()}`}>{p.stockState}</span></td>
+                          <td>{p.availableItems} / {p.totalItems}</td>
+                          <td>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <button onClick={() => startEditingProduct(p)} className="btn btn-ghost btn-sm" style={{ color: "var(--accent)" }}>Edit</button>
+                              <button onClick={() => handleDeleteProduct(p.id)} className="btn btn-ghost btn-sm" style={{ color: "var(--red)" }}>Del</button>
+                            </div>
+                          </td>
+                        </tr>
+                        {editingProductId === p.id && (
+                          <tr style={{ background: "var(--bg-secondary)" }}>
+                            <td colSpan={6} style={{ padding: "16px" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                                <input className="form-input" placeholder="Name" value={editProductData.name} onChange={e => setEditProductData({...editProductData, name: e.target.value})} />
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <select className="form-input" style={{ width: "80px" }} value={editProductData.currency} onChange={e => setEditProductData({...editProductData, currency: e.target.value})}>
+                                    <option value="USD">USD</option>
+                                    <option value="EUR">EUR</option>
+                                    <option value="GBP">GBP</option>
+                                  </select>
+                                  <input className="form-input" placeholder="Price" type="number" step="0.01" value={editProductData.price} onChange={e => setEditProductData({...editProductData, price: e.target.value})} />
+                                </div>
+                                <textarea className="form-input" placeholder="Description" rows={2} style={{ gridColumn: "span 2" }} value={editProductData.description} onChange={e => setEditProductData({...editProductData, description: e.target.value})} />
+                                <div style={{ gridColumn: "span 2", display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                                  <button onClick={() => setEditingProductId(null)} className="btn btn-ghost btn-sm">Cancel</button>
+                                  <button onClick={handleEditProductSubmit} className="btn btn-primary btn-sm">Save Changes</button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -508,8 +602,21 @@ export default function ClientAdminPanel() {
                                 )}
                               </p>
                               <p style={{ marginBottom: "8px", marginTop: "12px" }}>
-                                <strong>Payment Method:</strong> {order.paymentMethod === "DIRECT_CRYPTO" ? `Coinbase (${order.cryptoCurrency})` : "Wallet Balance"}
+                                <strong>Payment Method:</strong> {order.paymentMethod === "DIRECT_CRYPTO" ? `Crypto (${order.cryptoCurrency})` : "Wallet Balance"}
                               </p>
+                              {order.paymentMethod === "DIRECT_CRYPTO" && order.status === "PENDING_PAYMENT" && (
+                                <div style={{ background: "rgba(0, 113, 227, 0.05)", border: "1px solid var(--accent)", padding: "12px", borderRadius: "var(--radius-sm)", marginTop: "12px" }}>
+                                  <p style={{ fontSize: "13px", fontWeight: "600", color: "var(--accent)", marginBottom: "8px" }}>Awaiting On-Chain Payment</p>
+                                  <p style={{ fontSize: "12px", marginBottom: "4px" }}>Amount Expected: <strong>${order.cryptoAmountDue}</strong> in {order.cryptoCurrency}</p>
+                                  <p style={{ fontSize: "12px", marginBottom: "12px" }}>Address: <span style={{ fontFamily: "monospace" }}>{order.paymentWalletAddress}</span></p>
+                                  <button onClick={() => handleConfirmPayment(order.id)} className="btn btn-primary btn-sm" style={{ width: "100%" }}>
+                                    Confirm Payment Received
+                                  </button>
+                                </div>
+                              )}
+                              {order.paymentMethod === "DIRECT_CRYPTO" && order.status !== "PENDING_PAYMENT" && (
+                                <p style={{ fontSize: "12px", color: "var(--green)", marginTop: "8px", fontWeight: "600" }}>✓ Payment Verified</p>
+                              )}
                               {order.coinbaseChargeUrl && (
                                 <p style={{ fontSize: "12px" }}>
                                   <a href={order.coinbaseChargeUrl} target="_blank" rel="noreferrer">View Charge</a>
@@ -636,45 +743,60 @@ export default function ClientAdminPanel() {
           {/* PAYMENTS */}
           {activeTab === "payments" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px", animation: "fadeIn 0.4s ease" }}>
-              <h2 style={{ fontSize: "28px" }}>Payment Configuration</h2>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h2 style={{ fontSize: "28px" }}>Payment Configuration</h2>
+                <button onClick={handleUpdateCrypto} className="btn btn-primary">Save Changes</button>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", alignItems: "start" }}>
-                <div className="card">
-                  <h3 style={{ marginBottom: "16px", fontSize: "18px" }}>Wallet Deposit Address</h3>
+                
+                {/* Crypto Wallet Configuration */}
+                <div className="card" style={{ gridColumn: "span 2" }}>
+                  <h3 style={{ marginBottom: "16px", fontSize: "18px" }}>Crypto Wallet Addresses & Network Fees</h3>
                   <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginBottom: "24px" }}>
-                    Address displayed to customers when depositing funds to their wallet balance.
+                    Configure your receiving addresses and estimated network fees for each supported cryptocurrency. The fees will be added to the customer's total at checkout.
                   </p>
-                  <form onSubmit={handleUpdateCrypto} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">Receiving Address</label>
-                      <input 
-                        className="form-input" 
-                        value={cryptoAddress} 
-                        onChange={e => setCryptoAddress(e.target.value)} 
-                        placeholder="e.g. bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" 
-                        required 
-                        style={{ fontFamily: "monospace", fontSize: "16px" }}
-                      />
-                    </div>
-                    <button type="submit" className="btn btn-primary">Update Address</button>
-                  </form>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
+                    {[
+                      { label: "Bitcoin (BTC)", code: "BTC", addrKey: "WALLET_BTC", feeKey: "FEE_BTC" },
+                      { label: "Ethereum (ETH)", code: "ETH", addrKey: "WALLET_ETH", feeKey: "FEE_ETH" },
+                      { label: "USDT (ERC-20)", code: "USDT_ERC20", addrKey: "WALLET_USDT_ERC20", feeKey: "FEE_USDT_ERC20" },
+                      { label: "USDT (TRC-20)", code: "USDT_TRC20", addrKey: "WALLET_USDT_TRC20", feeKey: "FEE_USDT_TRC20" },
+                      { label: "Solana (SOL)", code: "SOL", addrKey: "WALLET_SOL", feeKey: "FEE_SOL" },
+                      { label: "Tron (TRX)", code: "TRX", addrKey: "WALLET_TRX", feeKey: "FEE_TRX" },
+                    ].map(crypto => (
+                      <div key={crypto.code} style={{ background: "var(--bg-secondary)", padding: "16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                        <h4 style={{ marginBottom: "12px", fontSize: "14px" }}>{crypto.label}</h4>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: "11px" }}>Receiving Address</label>
+                          <input 
+                            className="form-input" 
+                            style={{ fontFamily: "monospace", fontSize: "12px" }}
+                            value={cryptoSettings[crypto.addrKey as keyof typeof cryptoSettings]} 
+                            onChange={e => setCryptoSettings({...cryptoSettings, [crypto.addrKey]: e.target.value})} 
+                            placeholder={`Enter ${crypto.code} address`} 
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: "11px" }}>Est. Network Fee (USD)</label>
+                          <input 
+                            className="form-input" 
+                            type="number" step="0.01"
+                            style={{ fontSize: "12px" }}
+                            value={cryptoSettings[crypto.feeKey as keyof typeof cryptoSettings]} 
+                            onChange={e => setCryptoSettings({...cryptoSettings, [crypto.feeKey]: e.target.value})} 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="card">
-                  <h3 style={{ marginBottom: "16px", fontSize: "18px" }}>Coinbase Commerce</h3>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: "1.6" }}>
-                    <strong>Direct Crypto Payments:</strong> To accept BTC/ETH directly during checkout, configure your Coinbase API Key in the `.env` file (`COINBASE_COMMERCE_API_KEY`).
-                  </p>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: "1.6", marginTop: "12px" }}>
-                    Set your Webhook URL in Coinbase Commerce to:
-                    <br />
-                    <code>https://yourdomain.com/api/webhooks/coinbase</code>
-                  </p>
-                </div>
               </div>
 
               {/* Deposit Requests Review Table */}
               <div className="card">
-                <h3 style={{ marginBottom: "16px", fontSize: "18px" }}>Wallet Deposit Requests</h3>
+                <h3 style={{ marginBottom: "16px", fontSize: "18px" }}>Legacy Wallet Deposit Requests</h3>
                 {deposits.length === 0 ? (
                   <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>No deposit requests submitted.</p>
                 ) : (

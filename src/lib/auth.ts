@@ -10,29 +10,31 @@ interface SessionPayload {
   username: string;
 }
 
-// Simple secure signing helper
-function encrypt(text: string): string {
-  const cipher = crypto.createCipheriv(
-    "aes-256-cbc",
-    crypto.scryptSync(SESSION_SECRET, "salt", 32),
-    Buffer.alloc(16, 0)
-  );
-  let encrypted = cipher.update(text, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  return encrypted;
+// Derive a 32-byte key from the secret
+function deriveKey(): Buffer {
+  return crypto.scryptSync(SESSION_SECRET, "s4f4r1_k3y_s4lt", 32);
 }
 
+// Encrypt with random IV prepended to ciphertext
+function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", deriveKey(), iv);
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  return iv.toString("hex") + ":" + encrypted;
+}
+
+// Decrypt by extracting IV from prefix
 function decrypt(encryptedText: string): string {
   try {
-    const decipher = crypto.createDecipheriv(
-      "aes-256-cbc",
-      crypto.scryptSync(SESSION_SECRET, "salt", 32),
-      Buffer.alloc(16, 0)
-    );
-    let decrypted = decipher.update(encryptedText, "hex", "utf8");
+    const parts = encryptedText.split(":");
+    if (parts.length !== 2) return "";
+    const iv = Buffer.from(parts[0], "hex");
+    const decipher = crypto.createDecipheriv("aes-256-cbc", deriveKey(), iv);
+    let decrypted = decipher.update(parts[1], "hex", "utf8");
     decrypted += decipher.final("utf8");
     return decrypted;
-  } catch (e) {
+  } catch {
     return "";
   }
 }
@@ -48,7 +50,7 @@ export async function createSession(payload: SessionPayload) {
   cookieStore.set(SESSION_COOKIE_NAME, encrypted, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
     path: "/",
     maxAge: 24 * 60 * 60, // 24 hours
   });
@@ -75,7 +77,7 @@ export async function getSession(): Promise<SessionPayload | null> {
       role: data.role,
       username: data.username,
     };
-  } catch (e) {
+  } catch {
     return null;
   }
 }

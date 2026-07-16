@@ -22,6 +22,7 @@ export async function GET() {
       name: p.name,
       description: p.description,
       price: p.price,
+      currency: p.currency,
       formula: p.formula,
       casNumber: p.casNumber,
       imageUrl: p.imageUrl,
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { name, description, price, formula, casNumber, imageUrl, categoryId } = await req.json();
+  const { name, description, price, formula, casNumber, imageUrl, categoryId, currency } = await req.json();
 
   if (!name || name.trim().length < 2) {
     return NextResponse.json({ error: "Product name must be at least 2 characters" }, { status: 400 });
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       description: description?.trim() || null,
       price: parseFloat(price),
+      currency: currency || "USD",
       formula: formula?.trim() || null,
       casNumber: casNumber?.trim() || null,
       imageUrl: imageUrl?.trim() || null,
@@ -72,6 +74,53 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ product });
+}
+
+// UPDATE product (price, name, description, etc.)
+export async function PUT(req: NextRequest) {
+  const session = await getSession();
+  if (!session || !["ADMIN", "SUPERADMIN"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { productId, name, description, price, formula, casNumber, imageUrl, currency } = await req.json();
+
+  if (!productId) {
+    return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
+  }
+
+  const existingProduct = await prisma.product.findUnique({ where: { id: productId } });
+  if (!existingProduct) {
+    return NextResponse.json({ error: "Product not found" }, { status: 404 });
+  }
+
+  // Check name uniqueness if name changed
+  if (name && name.trim() !== existingProduct.name) {
+    const nameConflict = await prisma.product.findUnique({ where: { name: name.trim() } });
+    if (nameConflict) {
+      return NextResponse.json({ error: "Another product with this name already exists" }, { status: 400 });
+    }
+  }
+
+  if (price !== undefined && price <= 0) {
+    return NextResponse.json({ error: "Price must be a positive number" }, { status: 400 });
+  }
+
+  const updateData: any = {};
+  if (name !== undefined) updateData.name = name.trim();
+  if (description !== undefined) updateData.description = description?.trim() || null;
+  if (price !== undefined) updateData.price = parseFloat(price);
+  if (currency !== undefined) updateData.currency = currency;
+  if (formula !== undefined) updateData.formula = formula?.trim() || null;
+  if (casNumber !== undefined) updateData.casNumber = casNumber?.trim() || null;
+  if (imageUrl !== undefined) updateData.imageUrl = imageUrl?.trim() || null;
+
+  const updatedProduct = await prisma.product.update({
+    where: { id: productId },
+    data: updateData,
+  });
+
+  return NextResponse.json({ product: updatedProduct });
 }
 
 export async function DELETE(req: NextRequest) {
