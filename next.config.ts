@@ -19,11 +19,6 @@ const nextConfig: NextConfig = {
 
   // Disable powered-by header
   poweredByHeader: false,
-  
-  // Enable instrumentation hook for Telegram bots
-  experimental: {
-    instrumentationHook: true,
-  },
 };
 
 export default nextConfig;
