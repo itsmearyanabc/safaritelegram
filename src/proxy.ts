@@ -8,7 +8,7 @@ import type { NextRequest } from "next/server";
  * Routes are enabled by default; set ENABLE_ADMIN=false to hide them
  * (e.g. a customer-only mirror deploy).
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAdminRoute =

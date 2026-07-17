@@ -18,9 +18,9 @@ if (globalForPrisma.prisma) {
     throw new Error("DATABASE_URL environment variable is not set. Please configure your PostgreSQL connection string.");
   }
 
-  prisma = new PrismaClient({
-    datasourceUrl: connectionString,
-  });
+  // Prisma 7 reads the datasource URL from prisma.config.ts at generate-time.
+  // We still validate DATABASE_URL above for a clear early error in scripts/bots.
+  prisma = new PrismaClient();
 
   if (process.env.NODE_ENV !== "production") {
     globalForPrisma.prisma = prisma;
