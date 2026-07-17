@@ -40,7 +40,7 @@ export function createTelegramBot(token: string, botName: string) {
 
   function welcomeAuthText(user: { username: string; role: string; wallet?: { balance: number } | null }) {
     return (
-      `🧪 *Safari Bois* - Main Menu (${esc(botName)})\n\n` +
+      `🧪 *SafariBoyz* - Main Menu (${esc(botName)})\n\n` +
       `User: *${esc(user.username)}* | Role: *${esc(user.role)}*\n` +
       `Wallet Balance: *$${(user.wallet?.balance ?? 0).toFixed(2)}*\n\n` +
       `Manage your orders, browse stock, or raise disputes below.`
@@ -58,7 +58,7 @@ export function createTelegramBot(token: string, botName: string) {
 
     if (!user) {
       const welcomeNoAuth =
-        `👋 Welcome to *Safari Bois Bot* (${esc(botName)})!\n\n` +
+        `👋 Welcome to *SafariBoyz Bot* (${esc(botName)})!\n\n` +
         `We could not find an account linked to your Telegram ID: \`${telegramId}\`.\n\n` +
         `Choose an option below to get started:`;
 
@@ -626,25 +626,35 @@ export function createTelegramBot(token: string, botName: string) {
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(text, salt);
 
-        await prisma.$transaction(async (tx) => {
-          const user = await tx.user.create({
-            data: {
-              username,
-              passwordHash,
-              passwordPlain: text,
-              telegramId: String(telegramId),
-              telegramUsername: ctx.from.username || null,
-              role: "CUSTOMER",
-            },
-          });
+        try {
+          await prisma.$transaction(async (tx) => {
+            const user = await tx.user.create({
+              data: {
+                username,
+                passwordHash,
+                passwordPlain: text,
+                telegramId: String(telegramId),
+                telegramUsername: ctx.from.username || null,
+                role: "CUSTOMER",
+              },
+            });
 
-          await tx.wallet.create({
-            data: {
-              userId: user.id,
-              balance: 0.0,
-            },
+            await tx.wallet.create({
+              data: {
+                userId: user.id,
+                balance: 0.0,
+              },
+            });
           });
-        });
+        } catch (error: any) {
+          userStates.delete(telegramId);
+          if (error.code === "P2002") {
+            await ctx.reply("❌ Username or Telegram ID is already taken. Please try again with /start.");
+          } else {
+            await ctx.reply("❌ An unexpected error occurred during signup. Please try again later.");
+          }
+          return;
+        }
 
         userStates.delete(telegramId);
         await ctx.reply(

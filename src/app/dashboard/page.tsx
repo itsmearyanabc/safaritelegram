@@ -318,7 +318,7 @@ export default function Dashboard() {
         borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "18px", fontWeight: "700" }}>Safari Bois</span>
+          <span style={{ fontSize: "18px", fontWeight: "700" }}>SafariBoyz</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <div style={{

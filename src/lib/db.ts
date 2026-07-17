@@ -1,10 +1,10 @@
 import dotenv from "dotenv";
 import path from "path";
-import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
 
 // Scripts/bots import this module before Next.js loads env — ensure .env is available.
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
+import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -18,8 +18,9 @@ if (globalForPrisma.prisma) {
     throw new Error("DATABASE_URL environment variable is not set. Please configure your PostgreSQL connection string.");
   }
 
-  const adapter = new PrismaPg({ connectionString });
-  prisma = new PrismaClient({ adapter });
+  prisma = new PrismaClient({
+    datasourceUrl: connectionString,
+  });
 
   if (process.env.NODE_ENV !== "production") {
     globalForPrisma.prisma = prisma;

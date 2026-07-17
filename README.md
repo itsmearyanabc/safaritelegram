@@ -1,4 +1,4 @@
-# Safari Bois
+# SafariBoyz
 
 Closed-wallet telesales shop with website checkout and dual Telegram bots.
 
@@ -16,7 +16,7 @@ Closed-wallet telesales shop with website checkout and dual Telegram bots.
 cp .env.example .env
 ```
 
-Required vars: `DATABASE_URL`, `SESSION_SECRET`, `TELEGRAM_BOT_1_TOKEN`, `NEXT_PUBLIC_SITE_URL`, `ENABLE_ADMIN=true`.
+Required vars: `DATABASE_URL`, `SESSION_SECRET`, `TELEGRAM_BOT_1_TOKEN`, `NEXT_PUBLIC_SITE_URL`.
 
 2. Start Postgres (example with Docker):
 
@@ -74,7 +74,7 @@ npm run bots   # Telegram bots (required; website does not start them)
 
 `render.yaml` defines:
 
-- `safari-web` — website + admin (`ENABLE_ADMIN=true`)
+- `safari-web` — website + admin
 - `safari-bot` — Telegram worker
 - `safari-db` — Postgres
 
