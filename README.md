@@ -49,11 +49,10 @@ Seeded logins:
 | staff | staff123 | STAFF |
 | customer | customer123 | CUSTOMER ($500) |
 
-4. Run **two** processes:
+4. Run **one** process (for both web and bots):
 
 ```bash
-npm run dev    # website — http://localhost:3000
-npm run bots   # Telegram bots (required; website does not start them)
+npm run dev    # website + telegram bots (bots start automatically)
 ```
 
 - Shop / dashboard: http://localhost:3000  
@@ -70,12 +69,9 @@ npm run bots   # Telegram bots (required; website does not start them)
 | `npm run reset-db` | Reset DB and recreate admin |
 | `npm run build` / `npm start` | Production web |
 
-## Deploy (Render)
-
 `render.yaml` defines:
 
-- `safari-web` — website + admin
-- `safari-bot` — Telegram worker
+- `safari-web` — website + admin + Telegram bots (all in one process)
 - `safari-db` — Postgres
 
 Set `TELEGRAM_BOT_1_TOKEN`, `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`, and `NEXT_PUBLIC_SITE_URL` in the Render dashboard (`sync: false` vars).
