@@ -5,6 +5,7 @@ import path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -18,9 +19,8 @@ if (globalForPrisma.prisma) {
     throw new Error("DATABASE_URL environment variable is not set. Please configure your PostgreSQL connection string.");
   }
 
-  // Prisma 7 reads the datasource URL from prisma.config.ts at generate-time.
-  // We still validate DATABASE_URL above for a clear early error in scripts/bots.
-  prisma = new PrismaClient();
+  const adapter = new PrismaPg({ connectionString });
+  prisma = new PrismaClient({ adapter });
 
   if (process.env.NODE_ENV !== "production") {
     globalForPrisma.prisma = prisma;
