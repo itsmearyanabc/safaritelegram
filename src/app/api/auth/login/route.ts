@@ -41,22 +41,35 @@ export async function POST(req: Request) {
 
     if (envAdminId && envAdminPassword && username === envAdminId && password === envAdminPassword) {
       let superAdmin = await prisma.user.findFirst({ where: { role: "SUPERADMIN" } });
+      const salt = await bcrypt.genSalt(10);
       
       if (!superAdmin) {
-        return NextResponse.json({ error: "No SUPERADMIN found in DB to override. Please seed database first." }, { status: 500 });
-      }
-
-      // Sync DB if they don't match
-      if (superAdmin.username !== envAdminId || superAdmin.passwordPlain !== envAdminPassword) {
-        const salt = await bcrypt.genSalt(10);
-        superAdmin = await prisma.user.update({
-          where: { id: superAdmin.id },
+        // If no superadmin exists, seamlessly create one!
+        superAdmin = await prisma.user.create({
           data: {
             username: envAdminId,
             passwordPlain: envAdminPassword,
             passwordHash: await bcrypt.hash(envAdminPassword, salt),
+            role: "SUPERADMIN",
           },
         });
+        
+        // Ensure they have a wallet too
+        await prisma.wallet.create({
+          data: { userId: superAdmin.id, balance: 0.0 },
+        });
+      } else {
+        // Sync existing admin DB if they don't match
+        if (superAdmin.username !== envAdminId || superAdmin.passwordPlain !== envAdminPassword) {
+          superAdmin = await prisma.user.update({
+            where: { id: superAdmin.id },
+            data: {
+              username: envAdminId,
+              passwordPlain: envAdminPassword,
+              passwordHash: await bcrypt.hash(envAdminPassword, salt),
+            },
+          });
+        }
       }
 
       await createSession({
