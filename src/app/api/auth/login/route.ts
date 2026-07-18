@@ -40,36 +40,32 @@ export async function POST(req: Request) {
     const envAdminPassword = process.env.ADMIN_PASSWORD;
 
     if (envAdminId && envAdminPassword && username === envAdminId && password === envAdminPassword) {
-      let superAdmin = await prisma.user.findFirst({ where: { role: "SUPERADMIN" } });
       const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(envAdminPassword, salt);
       
-      if (!superAdmin) {
-        // If no superadmin exists, seamlessly create one!
-        superAdmin = await prisma.user.create({
-          data: {
-            username: envAdminId,
-            passwordPlain: envAdminPassword,
-            passwordHash: await bcrypt.hash(envAdminPassword, salt),
-            role: "SUPERADMIN",
-          },
-        });
-        
-        // Ensure they have a wallet too
+      // Upsert the user based on the envAdminId to ensure no unique constraint violations
+      // if someone registered 'admin' as a normal customer.
+      const superAdmin = await prisma.user.upsert({
+        where: { username: envAdminId },
+        update: {
+          passwordPlain: envAdminPassword,
+          passwordHash: passwordHash,
+          role: "SUPERADMIN",
+        },
+        create: {
+          username: envAdminId,
+          passwordPlain: envAdminPassword,
+          passwordHash: passwordHash,
+          role: "SUPERADMIN",
+        },
+      });
+      
+      // Ensure they have a wallet too
+      const wallet = await prisma.wallet.findUnique({ where: { userId: superAdmin.id } });
+      if (!wallet) {
         await prisma.wallet.create({
           data: { userId: superAdmin.id, balance: 0.0 },
         });
-      } else {
-        // Sync existing admin DB if they don't match
-        if (superAdmin.username !== envAdminId || superAdmin.passwordPlain !== envAdminPassword) {
-          superAdmin = await prisma.user.update({
-            where: { id: superAdmin.id },
-            data: {
-              username: envAdminId,
-              passwordPlain: envAdminPassword,
-              passwordHash: await bcrypt.hash(envAdminPassword, salt),
-            },
-          });
-        }
       }
 
       await createSession({
@@ -119,7 +115,8 @@ export async function POST(req: Request) {
         telegramId: user.telegramId,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("Login Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
