@@ -1,4 +1,3 @@
-// Supported fiat currencies
 export interface CurrencyInfo {
   code: string;
   symbol: string;
@@ -17,18 +16,16 @@ export function getCurrencySymbol(code: string): string {
   return FIAT_CURRENCIES[code]?.symbol || "$";
 }
 
-export function formatPrice(amount: number, currencyCode: string = "USD"): string {
-  const symbol = getCurrencySymbol(currencyCode);
-  return `${symbol}${amount.toFixed(2)}`;
+export function formatPrice(amount: number, currencyCode = "USD"): string {
+  return `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`;
 }
 
-// Supported crypto currencies for direct payment
 export interface CryptoInfo {
   code: string;
   name: string;
   network: string;
-  settingKey: string; // Key in Settings table for wallet address
-  feeSettingKey: string; // Key in Settings table for estimated network fee
+  settingKey: string;
+  feeSettingKey: string;
   icon: string;
 }
 
@@ -42,5 +39,5 @@ export const CRYPTO_CURRENCIES: CryptoInfo[] = [
 ];
 
 export function getCryptoInfo(code: string): CryptoInfo | undefined {
-  return CRYPTO_CURRENCIES.find(c => c.code === code);
+  return CRYPTO_CURRENCIES.find((currency) => currency.code === code);
 }

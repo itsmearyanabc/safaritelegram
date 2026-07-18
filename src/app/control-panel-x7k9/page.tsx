@@ -460,8 +460,15 @@ export default function ClientAdminPanel() {
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <input className="form-input" placeholder="Product Name" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <input className="form-input" placeholder="Price (USD)" type="number" step="0.01" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                  <div className="form-group" style={{ marginBottom: 0, display: "flex", gap: "8px" }}>
+                    <select aria-label="Product currency" className="form-input" style={{ width: "104px" }} value={newProduct.currency} onChange={e => setNewProduct({...newProduct, currency: e.target.value})}>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                      <option value="AUD">AUD</option>
+                      <option value="CAD">CAD</option>
+                    </select>
+                    <input className="form-input" placeholder={`Price (${newProduct.currency})`} type="number" min="0.01" step="0.01" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <select className="form-input" value={newProduct.categoryId} onChange={e => setNewProduct({...newProduct, categoryId: e.target.value})} required>
@@ -526,6 +533,8 @@ export default function ClientAdminPanel() {
                                     <option value="USD">USD</option>
                                     <option value="EUR">EUR</option>
                                     <option value="GBP">GBP</option>
+                                    <option value="AUD">AUD</option>
+                                    <option value="CAD">CAD</option>
                                   </select>
                                   <input className="form-input" placeholder="Price" type="number" step="0.01" value={editProductData.price} onChange={e => setEditProductData({...editProductData, price: e.target.value})} />
                                 </div>

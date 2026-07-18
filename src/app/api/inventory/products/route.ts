@@ -38,6 +38,7 @@ export async function GET() {
               name: product.name,
               description: product.description,
               price: product.price,
+              currency: product.currency,
               formula: product.formula,
               casNumber: product.casNumber,
               imageUrl: product.imageUrl,

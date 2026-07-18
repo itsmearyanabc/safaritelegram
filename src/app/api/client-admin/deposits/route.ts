@@ -41,29 +41,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
     }
 
-    const depositRequest = await prisma.depositRequest.findUnique({
-      where: { id: depositRequestId },
-      include: { user: { include: { wallet: true } } },
-    });
-
-    if (!depositRequest) {
-      return NextResponse.json({ error: "Deposit request not found" }, { status: 404 });
-    }
-
-    if (depositRequest.status !== "PENDING") {
-      return NextResponse.json({ error: "Deposit request has already been processed" }, { status: 400 });
-    }
-
     if (action === "REJECT") {
-      const updated = await prisma.depositRequest.update({
-        where: { id: depositRequestId },
+      const rejected = await prisma.depositRequest.updateMany({
+        where: { id: depositRequestId, status: "PENDING" },
         data: { status: "REJECTED" },
       });
-      return NextResponse.json({ success: true, status: updated.status });
+      if (rejected.count !== 1) {
+        return NextResponse.json({ error: "Deposit request was not found or has already been processed" }, { status: 400 });
+      }
+      return NextResponse.json({ success: true, status: "REJECTED" });
     }
 
-    // Approve action (transaction)
+    // Approve action. Claiming the pending request inside the transaction makes
+    // manual approval idempotent even if two administrators act at the same time.
     const result = await prisma.$transaction(async (tx) => {
+      const depositRequest = await tx.depositRequest.findUnique({
+        where: { id: depositRequestId },
+        include: { user: { include: { wallet: true } } },
+      });
+      if (!depositRequest) throw new Error("Deposit request not found");
+
+      const claimed = await tx.depositRequest.updateMany({
+        where: { id: depositRequestId, status: "PENDING" },
+        data: { status: "PROCESSING" },
+      });
+      if (claimed.count !== 1) throw new Error("Deposit request has already been processed");
+
       const wallet = depositRequest.user.wallet;
       if (!wallet) {
         throw new Error("User does not have a wallet");

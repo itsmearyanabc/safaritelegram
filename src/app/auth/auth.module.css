@@ -1,0 +1,46 @@
+.page {
+  min-height: 100vh;
+  padding: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--auth-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.page::before, .page::after {
+  content: "";
+  position: fixed;
+  width: 44vw;
+  height: 44vw;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: .28;
+  pointer-events: none;
+}
+
+.page::before { top: -20vw; left: -18vw; background: #d79a35; }
+.page::after { right: -20vw; bottom: -22vw; background: #825de7; }
+
+.topbar { position: fixed; inset: 24px 30px auto; z-index: 2; display: flex; justify-content: space-between; align-items: center; }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text-primary); font-size: 15px; font-weight: 800; letter-spacing: .08em; }
+.brandMark { display: grid; place-items: center; width: 32px; height: 32px; color: #17120a; background: linear-gradient(135deg, #f4cf7d, #bd7b1c); border-radius: 10px; box-shadow: 0 6px 18px rgba(177, 112, 24, .25); font-size: 11px; }
+.card { position: relative; z-index: 1; width: min(100%, 440px); padding: 32px; background: var(--auth-card); border: 1px solid var(--auth-border); border-radius: 24px; box-shadow: var(--auth-shadow); backdrop-filter: blur(20px); }
+.heading { margin-bottom: 26px; }
+.heading h1 { font-size: 29px; margin-bottom: 8px; }
+.heading p { color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
+.form { display: grid; gap: 17px; }
+.field { display: grid; gap: 7px; }
+.field label { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.passwordWrap { position: relative; }
+.passwordWrap input { padding-right: 46px; }
+.iconButton { position: absolute; top: 50%; right: 8px; translate: 0 -50%; color: var(--text-secondary); background: transparent; border: 0; cursor: pointer; padding: 8px; font-size: 17px; }
+.captcha { padding: 15px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 14px; }
+.captchaLine { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.captchaQuestion { font-weight: 800; letter-spacing: .04em; }
+.refresh { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.submit { width: 100%; min-height: 48px; border-radius: 13px; }
+.alternate { margin-top: 23px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; color: var(--text-secondary); font-size: 14px; }
+.alternate a { color: var(--text-primary); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 560px) { .page { padding: 18px; align-items: end; } .topbar { inset: 16px 18px auto; } .card { padding: 27px 22px; margin-top: 72px; } .themeText { display: none; } }

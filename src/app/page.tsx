@@ -1,143 +1,28 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import SiteFooter from "@/components/SiteFooter";
+import ThemeToggle from "@/components/ThemeToggle";
+import styles from "./home.module.css";
 
 export const revalidate = 0;
 
 export default async function Home() {
   const session = await getSession();
-
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      {/* Nav */}
-      <header style={{
-        padding: "16px 40px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        borderBottom: "1px solid var(--border)",
-        background: "rgba(255,255,255,0.8)",
-        backdropFilter: "blur(20px)",
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-      }}>
-        <span style={{ fontSize: "18px", fontWeight: "700", letterSpacing: "-0.01em", color: "var(--text-primary)" }}>
-          SafariBoyz
-        </span>
-        <nav style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          {session ? (
-            <Link href="/dashboard" className="btn btn-primary btn-sm">
-              Dashboard
-            </Link>
-          ) : (
-            <>
-              <Link href="/auth/login" className="btn btn-ghost btn-sm">Log In</Link>
-              <Link href="/auth/register" className="btn btn-primary btn-sm">Sign Up</Link>
-            </>
-          )}
-        </nav>
-      </header>
-
-      {/* Hero */}
-      <section style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        padding: "100px 40px 80px",
-        maxWidth: "720px",
-        margin: "0 auto",
-      }}>
-        <div style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "6px",
-          background: "var(--accent-light)",
-          color: "var(--accent)",
-          padding: "6px 14px",
-          borderRadius: "var(--radius-pill)",
-          fontSize: "13px",
-          fontWeight: "600",
-          marginBottom: "24px",
-        }}>
-          <span>🔒</span> Secure Wallet-Based Platform
-        </div>
-
-        <h1 style={{ marginBottom: "20px" }}>
-          The smarter way to source compounds.
-        </h1>
-        <p style={{
-          fontSize: "19px",
-          color: "var(--text-secondary)",
-          lineHeight: "1.6",
-          maxWidth: "560px",
-          marginBottom: "40px",
-        }}>
-          Browse, order, and track deliveries — all powered by a secure closed-wallet system with crypto payments and 24/7 Telegram bot access.
-        </p>
-
-        <div style={{ display: "flex", gap: "12px" }}>
-          {session ? (
-            <Link href="/dashboard" className="btn btn-primary">
-              Open Dashboard
-            </Link>
-          ) : (
-            <>
-              <Link href="/auth/register" className="btn btn-primary">Sign Up</Link>
-              <Link href="/auth/login" className="btn btn-secondary">Log In</Link>
-            </>
-          )}
-        </div>
+  const dashboardHref = session ? "/dashboard" : "/auth/register";
+  return <div className={styles.page}>
+    <header className={styles.nav}>
+      <Link href="/" className="brand-lockup"><span className="brand-mark">SB</span><span>SAFARIBOYZ</span></Link>
+      <div className={styles.navLinks}><a href="#discover">Discover</a><a href="#access">Access</a></div>
+      <div className={styles.navRight}><ThemeToggle compact /><div className={styles.navActions}>{!session && <Link href="/auth/login" className="btn btn-ghost btn-sm">Sign in</Link>}<Link href={session ? "/dashboard" : "/auth/register"} className="btn btn-primary btn-sm">{session ? "Dashboard" : "Get started"}</Link></div></div>
+    </header>
+    <main>
+      <section className={styles.hero} id="discover">
+        <div className={styles.copy}><span className={styles.eyebrow}>◆ Private marketplace</span><h1>The <span>SAFARIBOYZ</span> experience, refined.</h1><p>Discover a clean, secure way to browse products, manage your wallet, and follow every order — built around effortless access.</p><div className={styles.heroActions}><Link href={dashboardHref} className="btn btn-primary">{session ? "Open dashboard" : "Create account"} <span>→</span></Link>{!session && <Link href="/auth/login" className="btn btn-secondary">Sign in</Link>}</div></div>
+        <div className={styles.visual} aria-hidden="true"><div className={styles.orb}>SB</div><div className={`${styles.floatCard} ${styles.topCard}`}><span>Secure wallet</span><strong>Private by design</strong></div><div className={`${styles.floatCard} ${styles.bottomCard}`}><span>Always available</span><strong>24/7 bot access</strong></div></div>
       </section>
-
-      {/* Features */}
-      <section style={{
-        background: "var(--bg-secondary)",
-        padding: "80px 40px",
-      }}>
-        <div style={{
-          maxWidth: "960px",
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "24px",
-        }}>
-          <div className="card" style={{ textAlign: "center", padding: "40px 28px" }}>
-            <div style={{ fontSize: "36px", marginBottom: "16px" }}>💳</div>
-            <h3 style={{ marginBottom: "10px" }}>Secure Wallet</h3>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.6" }}>
-              Deposit crypto, spend in-platform. Every transaction is logged in a permanent ledger for full transparency.
-            </p>
-          </div>
-          <div className="card" style={{ textAlign: "center", padding: "40px 28px" }}>
-            <div style={{ fontSize: "36px", marginBottom: "16px" }}>📦</div>
-            <h3 style={{ marginBottom: "10px" }}>FIFO Delivery</h3>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.6" }}>
-              First-in, first-out allocation ensures fair, ordered delivery of every batch and serial code.
-            </p>
-          </div>
-          <div className="card" style={{ textAlign: "center", padding: "40px 28px" }}>
-            <div style={{ fontSize: "36px", marginBottom: "16px" }}>🤖</div>
-            <h3 style={{ marginBottom: "10px" }}>24/7 Telegram Bot</h3>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.6" }}>
-              Browse products, check balances, and place orders instantly — right from Telegram, anytime.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer style={{
-        padding: "24px 40px",
-        textAlign: "center",
-        fontSize: "13px",
-        color: "var(--text-tertiary)",
-        borderTop: "1px solid var(--border)",
-      }}>
-        © {new Date().getFullYear()} SafariBoyz. All rights reserved.
-      </footer>
-    </div>
-  );
+      <section className={styles.botBanner} id="access"><div className={styles.botInfo}><span className={styles.botIcon}>◌</span><div><strong>Shop 24/7 with the SAFARIBOYZ Bot</strong><p>Instant, secure access to your account anytime, anywhere.</p></div></div><a className="btn btn-primary btn-sm" href="https://t.me/SafariBoys_bot" target="_blank" rel="noreferrer">Talk to bot →</a></section>
+      <section className={styles.features}><article className={styles.feature}><div className={styles.featureIcon}>◈</div><h3>Designed for clarity</h3><p>A calm, fast interface that makes products, payments, and order tracking easy to understand.</p></article><article className={styles.feature}><div className={styles.featureIcon}>◎</div><h3>Wallet confidence</h3><p>Keep your balance and transactions in one protected place, with transparent history.</p></article><article className={styles.feature}><div className={styles.featureIcon}>↗</div><h3>Access everywhere</h3><p>Move between the web dashboard and Telegram without losing your place.</p></article></section>
+    </main>
+    <SiteFooter />
+  </div>;
 }

@@ -50,13 +50,13 @@ export async function POST(req: Request) {
       }
 
       // 2. Mark item as allocated
-      await tx.inventoryItem.update({
-        where: { id: item.id },
-        data: {
-          isAllocated: true,
-          allocatedAt: new Date(),
-        },
+      const claimed = await tx.inventoryItem.updateMany({
+        where: { id: item.id, isAllocated: false },
+        data: { isAllocated: true, allocatedAt: new Date() },
       });
+      if (claimed.count !== 1) {
+        throw new Error("Inventory item is no longer available. Refresh and try again.");
+      }
 
       // 3. Recalculate stock state
       const unallocatedCount = await tx.inventoryItem.count({

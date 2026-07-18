@@ -35,6 +35,9 @@ export async function POST(req: Request) {
     if (product.stockState === "OUT_OF_STOCK") {
       return NextResponse.json({ error: "Product is out of stock" }, { status: 400 });
     }
+    if (product.currency !== "USD") {
+      return NextResponse.json({ error: "Direct crypto checkout is currently available for USD-priced products only." }, { status: 400 });
+    }
 
     // Fetch the admin's wallet address for this currency
     const walletSetting = await prisma.setting.findUnique({

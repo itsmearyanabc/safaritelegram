@@ -33,6 +33,9 @@ export async function POST(req: Request) {
       if (!wallet || wallet.balance < product.price) {
         throw new Error("Insufficient wallet balance. Please deposit funds.");
       }
+      if (wallet.currency !== product.currency) {
+        throw new Error(`This product is priced in ${product.currency}, but your wallet is in ${wallet.currency}. Currency conversion is not available.`);
+      }
 
       // 2. Fetch oldest unallocated item for the product (FIFO)
       const item = await tx.inventoryItem.findFirst({
@@ -61,13 +64,13 @@ export async function POST(req: Request) {
       });
 
       // 5. Mark item as allocated
-      await tx.inventoryItem.update({
-        where: { id: item.id },
-        data: {
-          isAllocated: true,
-          allocatedAt: new Date(),
-        },
+      const claimed = await tx.inventoryItem.updateMany({
+        where: { id: item.id, isAllocated: false },
+        data: { isAllocated: true, allocatedAt: new Date() },
       });
+      if (claimed.count !== 1) {
+        throw new Error("This item was just purchased by another customer. Please try again.");
+      }
 
       // 6. Recalculate and update stock state
       const unallocatedCount = await tx.inventoryItem.count({

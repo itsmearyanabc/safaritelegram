@@ -208,6 +208,9 @@ export function createTelegramBot(token: string, botName: string) {
             `Insufficient wallet balance.\n\nPlease log in to our website to pay directly with Crypto (BTC, ETH, USDT, SOL, TRX) or to deposit funds.`
           );
         }
+        if (wallet.currency !== product.currency) {
+          throw new Error(`This item is priced in ${product.currency}, but your wallet uses ${wallet.currency}. Currency conversion is not available.`);
+        }
 
         const item = await tx.inventoryItem.findFirst({
           where: { productId, isAllocated: false },
@@ -232,10 +235,13 @@ export function createTelegramBot(token: string, botName: string) {
           },
         });
 
-        await tx.inventoryItem.update({
-          where: { id: item.id },
+        const claimed = await tx.inventoryItem.updateMany({
+          where: { id: item.id, isAllocated: false },
           data: { isAllocated: true, allocatedAt: new Date() },
         });
+        if (claimed.count !== 1) {
+          throw new Error("This item was just purchased by another customer. Please try again.");
+        }
 
         const unallocatedCount = await tx.inventoryItem.count({
           where: { productId, isAllocated: false },

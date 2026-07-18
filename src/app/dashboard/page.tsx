@@ -2,9 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
+import SiteFooter from "@/components/SiteFooter";
+import { formatPrice } from "@/lib/currencies";
+import styles from "./dashboard.module.css";
 
 interface Product {
   id: string; name: string; description: string; price: number;
+  currency: string;
   formula: string | null; casNumber: string | null; imageUrl: string | null;
   stockState: string; stockCount: number;
 }
@@ -299,9 +304,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg-secondary)" }}>
+    <div className={styles.shell}>
       {/* Telegram Banner */}
-      <div className="telegram-banner">
+      <div className={`telegram-banner ${styles.telegram}`}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "18px" }}>🤖</span>
           <span>24/7 Telegram Bot — Instant access to store anytime, anywhere</span>
@@ -312,80 +317,53 @@ export default function Dashboard() {
       </div>
 
       {/* Header */}
-      <header style={{
-        padding: "14px 32px", display: "flex", justifyContent: "space-between",
-        alignItems: "center", background: "var(--bg-primary)",
-        borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "18px", fontWeight: "700" }}>SafariBoyz</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <div style={{
-            background: "var(--bg-secondary)", padding: "8px 16px",
-            borderRadius: "var(--radius-pill)", display: "flex", alignItems: "center", gap: "8px",
-          }}>
-            <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Balance:</span>
-            <span style={{ fontWeight: "700", color: "var(--green)", fontSize: "15px" }}>
-              ${user.wallet.balance.toFixed(2)}
-            </span>
-          </div>
+      <header className={styles.topnav}>
+        <span className="brand-lockup"><span className="brand-mark">SB</span><span>SAFARIBOYZ</span></span>
+        <nav className={styles.tabs} aria-label="Dashboard sections">
+          {tabs.map(tab => (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}>
+              <span>{tab.icon}</span>{tab.label}
+              {tab.key === "orders" && orders.some(o => o.status === "COOLDOWN_ACTIVE") && <i className={styles.dot} />}
+            </button>
+          ))}
+        </nav>
+        <div className={styles.account}>
+          <div className={styles.balance}><span className={styles.balanceLabel}>Balance</span><strong>${user.wallet.balance.toFixed(2)}</strong></div>
           <button
             onClick={() => setActiveTab("profile")}
-            style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              background: "transparent", border: "none", cursor: "pointer",
-              fontFamily: "inherit", padding: "6px 12px", borderRadius: "var(--radius-pill)",
-              transition: "background 0.15s var(--ease)",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            className={styles.profileButton}
           >
-            <div style={{
-              width: "32px", height: "32px", borderRadius: "50%",
-              background: "linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#fff", fontWeight: "700", fontSize: "13px",
-            }}>
+            <div className={styles.avatar}>
               {user.username.slice(0, 2).toUpperCase()}
             </div>
-            <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "500" }}>{user.username}</span>
+            <span className={styles.profileName}>{user.username}</span>
           </button>
-          <button onClick={handleLogout} className="btn btn-ghost btn-sm">Log Out</button>
+          <ThemeToggle compact />
+          <button onClick={handleLogout} className={`btn btn-ghost btn-sm ${styles.logout}`}>Log out</button>
         </div>
       </header>
 
-      <div style={{ display: "flex", flex: 1, maxWidth: "1200px", width: "100%", margin: "0 auto", padding: "24px 20px", gap: "24px" }}>
-        {/* Sidebar */}
-        <aside style={{ width: "200px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              style={{
-                display: "flex", alignItems: "center", gap: "10px",
-                padding: "10px 14px", border: "none", borderRadius: "var(--radius-md)",
-                background: activeTab === tab.key ? "var(--accent-light)" : "transparent",
-                color: activeTab === tab.key ? "var(--accent)" : "var(--text-secondary)",
-                fontWeight: activeTab === tab.key ? "600" : "400",
-                fontSize: "14px", cursor: "pointer", textAlign: "left",
-                fontFamily: "inherit", transition: "all 0.15s var(--ease)",
-              }}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-              {tab.key === "orders" && orders.some(o => o.status === "COOLDOWN_ACTIVE") && (
-                <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--orange)", marginLeft: "auto" }} />
-              )}
-            </button>
-          ))}
-        </aside>
-
-        {/* Main */}
-        <main style={{ flex: 1, minWidth: 0 }}>
+      <div className={styles.content}>
+        <main className={styles.section}>
           {/* SHOP */}
           {activeTab === "shop" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <section className={styles.dashboardHero}>
+                <div>
+                  <p className={styles.heroKicker}>SAFARIBOYZ marketplace</p>
+                  <h1>Browse with confidence.</h1>
+                  <p>Choose a city to tailor what you see, then explore products from one streamlined dashboard.</p>
+                </div>
+                <label>
+                  <span className="form-label">Delivery city</span>
+                  <select className={styles.citySelect} defaultValue="any" aria-label="Select delivery city">
+                    <option value="any">Any city</option>
+                    <option value="dubai">Dubai</option>
+                    <option value="abu-dhabi">Abu Dhabi</option>
+                    <option value="sharjah">Sharjah</option>
+                  </select>
+                </label>
+              </section>
               <h2>Browse Products</h2>
 
               {shopMsg && (
@@ -426,7 +404,7 @@ export default function Dashboard() {
                             )}
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "14px", marginTop: "14px" }}>
-                            <span style={{ fontSize: "20px", fontWeight: "700" }}>${product.price.toFixed(2)}</span>
+                            <span style={{ fontSize: "20px", fontWeight: "700" }}>{formatPrice(product.price, product.currency)}</span>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
                               <button
                                 onClick={() => handleWalletBuy(product.id)}
@@ -1160,6 +1138,7 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+      <SiteFooter />
     </div>
   );
 }
