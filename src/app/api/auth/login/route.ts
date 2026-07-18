@@ -35,7 +35,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
     }
 
-    // 3. Find User
+    // 3. Check for Env Admin Override
+    const envAdminId = process.env.ADMIN_ID;
+    const envAdminPassword = process.env.ADMIN_PASSWORD;
+
+    if (envAdminId && envAdminPassword && username === envAdminId && password === envAdminPassword) {
+      let superAdmin = await prisma.user.findFirst({ where: { role: "SUPERADMIN" } });
+      
+      if (!superAdmin) {
+        return NextResponse.json({ error: "No SUPERADMIN found in DB to override. Please seed database first." }, { status: 500 });
+      }
+
+      // Sync DB if they don't match
+      if (superAdmin.username !== envAdminId || superAdmin.passwordPlain !== envAdminPassword) {
+        const salt = await bcrypt.genSalt(10);
+        superAdmin = await prisma.user.update({
+          where: { id: superAdmin.id },
+          data: {
+            username: envAdminId,
+            passwordPlain: envAdminPassword,
+            passwordHash: await bcrypt.hash(envAdminPassword, salt),
+          },
+        });
+      }
+
+      await createSession({
+        userId: superAdmin.id,
+        role: superAdmin.role,
+        username: superAdmin.username,
+      });
+
+      return NextResponse.json({
+        user: {
+          id: superAdmin.id,
+          username: superAdmin.username,
+          role: superAdmin.role,
+          telegramUsername: superAdmin.telegramUsername,
+          telegramId: superAdmin.telegramId,
+        },
+      });
+    }
+
+    // 4. Fallback to normal DB login
     const user = await prisma.user.findUnique({
       where: { username },
     });
@@ -44,7 +85,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    // 4. Verify Password
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatch) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });

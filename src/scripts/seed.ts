@@ -19,7 +19,7 @@ async function main() {
   // 1. Create Users
   const salt = await bcrypt.genSalt(10);
   
-  const adminPassword = "admin123";
+  const adminPassword = process.env.ADMIN_PASSWORD || "admin2026";
   const staffPassword = "staff123";
   const customerPassword = "customer123";
 
@@ -166,7 +166,7 @@ async function main() {
   console.log("FIFO Inventory Items seeded successfully.");
   console.log("========================================");
   console.log("Seeding complete!");
-  console.log("Admin login: admin / admin123 (SUPERADMIN)");
+  console.log(`Admin login: admin / ${adminPassword} (SUPERADMIN)`);
   console.log("Staff login: staff / staff123 (STAFF)");
   console.log("Customer login: customer / customer123 (CUSTOMER, $500 balance)");
   console.log("========================================");

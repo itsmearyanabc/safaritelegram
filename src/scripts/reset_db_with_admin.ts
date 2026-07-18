@@ -18,7 +18,7 @@ async function main() {
 
   // Create default Admin account
   const salt = await bcrypt.genSalt(10);
-  const adminPassword = "admin123";
+  const adminPassword = process.env.ADMIN_PASSWORD || "admin2026";
   const adminPasswordHash = await bcrypt.hash(adminPassword, salt);
 
   const admin = await prisma.user.create({
@@ -47,7 +47,7 @@ async function main() {
   console.log("   DATABASE RESET COMPLETE WITH FRESH ADMIN SEED   ");
   console.log("====================================================");
   console.log("Username: admin");
-  console.log("Password: admin123");
+  console.log(`Password: ${adminPassword}`);
   console.log("Role: SUPERADMIN");
   console.log("====================================================");
 }
