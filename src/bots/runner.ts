@@ -9,6 +9,20 @@ function isUsableToken(token: string | undefined, placeholder: string): token is
   return Boolean(token && token !== placeholder && token.length > 10);
 }
 
+function startBotWithRetry(bot: any, name: string) {
+  bot
+    .start({
+      onStart: (info: any) => {
+        console.log(`🤖 [${name}] @${info.username} running (long-polling).`);
+      },
+    })
+    .catch((err: any) => {
+      console.error(`❌ [${name}] Error:`, err.message);
+      console.log(`🔄 [${name}] Retrying in 5 seconds...`);
+      setTimeout(() => startBotWithRetry(bot, name), 5000);
+    });
+}
+
 async function startBots() {
   // Dynamic import so dotenv runs before db.ts evaluates DATABASE_URL
   const { createTelegramBot } = await import("./bot");
@@ -30,32 +44,16 @@ async function startBots() {
   }
 
   if (isUsableToken(token1, "PLACEHOLDER_BOT_1_TOKEN")) {
-    try {
-      const bot1 = createTelegramBot(token1, "Bot #1 (Customer)");
-      bot1.start({
-        onStart: (info) => {
-          console.log(`🤖 [Bot #1 - Customer] @${info.username} running (long-polling).`);
-        },
-      });
-    } catch (e) {
-      console.error("❌ Error starting Bot #1:", e);
-    }
+    const bot1 = createTelegramBot(token1, "Bot #1 (Customer)");
+    startBotWithRetry(bot1, "Bot #1 - Customer");
   } else {
     console.log("⚠️ [Bot #1 - Customer] Token is missing or placeholder. Skipping boot.");
     console.log("   Set TELEGRAM_BOT_1_TOKEN in .env, then run: npm run bots");
   }
 
   if (isUsableToken(token2, "PLACEHOLDER_BOT_2_TOKEN")) {
-    try {
-      const bot2 = createTelegramBot(token2, "Bot #2 (Mirror)");
-      bot2.start({
-        onStart: (info) => {
-          console.log(`🤖 [Bot #2 - Mirror] @${info.username} running (long-polling).`);
-        },
-      });
-    } catch (e) {
-      console.error("❌ Error starting Bot #2:", e);
-    }
+    const bot2 = createTelegramBot(token2, "Bot #2 (Mirror)");
+    startBotWithRetry(bot2, "Bot #2 - Mirror");
   } else {
     console.log("⚠️ [Bot #2 - Mirror] Token is missing or placeholder. Skipping boot.");
   }

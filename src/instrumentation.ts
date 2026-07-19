@@ -10,9 +10,32 @@ function isUsableToken(token: string | undefined, placeholder: string): token is
   return Boolean(token && token !== placeholder && token.length > 10);
 }
 
+function startBotWithRetry(bot: any, name: string) {
+  bot
+    .start({
+      onStart: (info: any) => {
+        console.log(`🤖 [${name}] @${info.username} running (long-polling).`);
+      },
+    })
+    .catch((err: any) => {
+      console.error(`❌ [${name}] Error:`, err.message);
+      console.log(`🔄 [${name}] Retrying in 5 seconds...`);
+      setTimeout(() => startBotWithRetry(bot, name), 5000);
+    });
+}
+
+declare global {
+  var __telegram_bots_started: boolean;
+}
+
 export async function register() {
   // Only run on the Node.js server runtime (not Edge, not during build)
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    if (global.__telegram_bots_started) {
+      return;
+    }
+    global.__telegram_bots_started = true;
+
     const token1 = process.env.TELEGRAM_BOT_1_TOKEN?.trim().replace(/^["']|["']$/g, "");
     const token2 = process.env.TELEGRAM_BOT_2_TOKEN?.trim().replace(/^["']|["']$/g, "");
 
@@ -32,29 +55,13 @@ export async function register() {
       const { createTelegramBot } = await import("./bots/bot");
 
       if (hasBot1) {
-        try {
-          const bot1 = createTelegramBot(token1, "Bot #1 (Customer)");
-          bot1.start({
-            onStart: (info) => {
-              console.log(`🤖 [Bot #1 - Customer] @${info.username} running (long-polling).`);
-            },
-          });
-        } catch (e) {
-          console.error("❌ Error starting Bot #1:", e);
-        }
+        const bot1 = createTelegramBot(token1, "Bot #1 (Customer)");
+        startBotWithRetry(bot1, "Bot #1 - Customer");
       }
 
       if (hasBot2) {
-        try {
-          const bot2 = createTelegramBot(token2, "Bot #2 (Mirror)");
-          bot2.start({
-            onStart: (info) => {
-              console.log(`🤖 [Bot #2 - Mirror] @${info.username} running (long-polling).`);
-            },
-          });
-        } catch (e) {
-          console.error("❌ Error starting Bot #2:", e);
-        }
+        const bot2 = createTelegramBot(token2, "Bot #2 (Mirror)");
+        startBotWithRetry(bot2, "Bot #2 - Mirror");
       }
     } catch (e) {
       console.error("❌ Failed to import bot module:", e);
