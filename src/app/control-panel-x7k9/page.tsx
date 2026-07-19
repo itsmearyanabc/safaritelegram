@@ -33,11 +33,11 @@ export default function ClientAdminPanel() {
   // Product management UI states
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryDesc, setNewCategoryDesc] = useState("");
-  const [newProduct, setNewProduct] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", categoryId: "", imageUrl: "" });
+  const [newProduct, setNewProduct] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", categoryId: "", imageUrl: "", stockState: "OUT_OF_STOCK" });
   const [newInventory, setNewInventory] = useState({ productId: "", data: "", locationData: "" });
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [editProductData, setEditProductData] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", imageUrl: "" });
+  const [editProductData, setEditProductData] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", imageUrl: "", stockState: "OUT_OF_STOCK" });
 
   const [cryptoSettings, setCryptoSettings] = useState({
     WALLET_BTC: "", FEE_BTC: "0",
@@ -223,7 +223,7 @@ export default function ClientAdminPanel() {
       });
       if (res.ok) {
         setMsg({ type: "success", text: "Product added!" });
-        setNewProduct({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", categoryId: "", imageUrl: "" });
+        setNewProduct({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", categoryId: "", imageUrl: "", stockState: "OUT_OF_STOCK" });
         fetchAll();
       } else {
         const d = await res.json(); setMsg({ type: "error", text: d.error });
@@ -240,7 +240,8 @@ export default function ClientAdminPanel() {
       currency: p.currency || "USD",
       formula: p.formula || "",
       casNumber: p.casNumber || "",
-      imageUrl: p.imageUrl || ""
+      imageUrl: p.imageUrl || "",
+      stockState: p.stockState || "OUT_OF_STOCK"
     });
   };
 
@@ -529,6 +530,12 @@ export default function ClientAdminPanel() {
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                                 <input className="form-input" placeholder="Name" value={editProductData.name} onChange={e => setEditProductData({...editProductData, name: e.target.value})} />
                                 <div style={{ display: "flex", gap: "8px" }}>
+                                  <select className="form-input" style={{ width: "140px" }} value={editProductData.stockState} onChange={e => setEditProductData({...editProductData, stockState: e.target.value})}>
+                                    <option value="IN_STOCK">IN_STOCK</option>
+                                    <option value="LOW_STOCK">LOW_STOCK</option>
+                                    <option value="CRITICAL_STOCK">CRITICAL_STOCK</option>
+                                    <option value="OUT_OF_STOCK">OUT_OF_STOCK</option>
+                                  </select>
                                   <select className="form-input" style={{ width: "80px" }} value={editProductData.currency} onChange={e => setEditProductData({...editProductData, currency: e.target.value})}>
                                     <option value="USD">USD</option>
                                     <option value="EUR">EUR</option>

@@ -23,15 +23,6 @@ export async function GET() {
         const products = await Promise.all(
           category.products.map(async (product) => {
             const unallocatedCount = product.items.length;
-            const calculatedStockState = getStockState(unallocatedCount);
-
-            // If DB stockState is out of sync, update it in background
-            if (product.stockState !== calculatedStockState) {
-              await prisma.product.update({
-                where: { id: product.id },
-                data: { stockState: calculatedStockState },
-              });
-            }
 
             return {
               id: product.id,
@@ -42,7 +33,7 @@ export async function GET() {
               formula: product.formula,
               casNumber: product.casNumber,
               imageUrl: product.imageUrl,
-              stockState: calculatedStockState,
+              stockState: product.stockState,
               stockCount: unallocatedCount,
             };
           })

@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { name, description, price, formula, casNumber, imageUrl, categoryId, currency } = await req.json();
+  const { name, description, price, formula, casNumber, imageUrl, categoryId, currency, stockState } = await req.json();
 
   if (!name || name.trim().length < 2) {
     return NextResponse.json({ error: "Product name must be at least 2 characters" }, { status: 400 });
@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       casNumber: casNumber?.trim() || null,
       imageUrl: imageUrl?.trim() || null,
       categoryId,
+      stockState: stockState || "OUT_OF_STOCK",
     },
   });
 
@@ -83,7 +84,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { productId, name, description, price, formula, casNumber, imageUrl, currency } = await req.json();
+  const { productId, name, description, price, formula, casNumber, imageUrl, currency, stockState } = await req.json();
 
   if (!productId) {
     return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
@@ -114,6 +115,7 @@ export async function PUT(req: NextRequest) {
   if (formula !== undefined) updateData.formula = formula?.trim() || null;
   if (casNumber !== undefined) updateData.casNumber = casNumber?.trim() || null;
   if (imageUrl !== undefined) updateData.imageUrl = imageUrl?.trim() || null;
+  if (stockState !== undefined) updateData.stockState = stockState;
 
   const updatedProduct = await prisma.product.update({
     where: { id: productId },
