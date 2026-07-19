@@ -29,7 +29,10 @@ export default function ThemeToggle({ compact = false }: { compact?: boolean }) 
       aria-label={`Switch to ${theme === "night" ? "day" : "night"} mode`}
       title={`Switch to ${theme === "night" ? "day" : "night"} mode`}
     >
-      <span aria-hidden="true">{theme === "night" ? "☀" : "☾"}</span>
+      <div className="theme-toggle-icon-wrap" aria-hidden="true">
+        <span className="theme-toggle-icon icon-sun">☀</span>
+        <span className="theme-toggle-icon icon-moon">☾</span>
+      </div>
       {!compact && <span>{theme === "night" ? "Day mode" : "Night mode"}</span>}
     </button>
   );

@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import SiteFooter from "@/components/SiteFooter";
+import DashboardNav from "@/components/DashboardNav";
 import { formatPrice } from "@/lib/currencies";
 import styles from "./dashboard.module.css";
 
@@ -48,6 +50,7 @@ export default function Dashboard() {
   const [walletMessage, setWalletMessage] = useState("");
   const [shopMsg, setShopMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Deposit gateway state
   const [depositRequests, setDepositRequests] = useState<any[]>([]);
@@ -305,43 +308,15 @@ export default function Dashboard() {
 
   return (
     <div className={styles.shell}>
-      {/* Telegram Banner */}
-      <div className={`telegram-banner ${styles.telegram}`}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "18px" }}>🤖</span>
-          <span>24/7 Telegram Bot — Instant access to store anytime, anywhere</span>
-        </div>
-        <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noopener noreferrer">
-          Talk to Bot →
-        </a>
-      </div>
-
       {/* Header */}
-      <header className={styles.topnav}>
-        <span className="brand-lockup"><span className="brand-mark">SB</span><span>SAFARIBOYZ</span></span>
-        <nav className={styles.tabs} aria-label="Dashboard sections">
-          {tabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}>
-              <span>{tab.icon}</span>{tab.label}
-              {tab.key === "orders" && orders.some(o => o.status === "COOLDOWN_ACTIVE") && <i className={styles.dot} />}
-            </button>
-          ))}
-        </nav>
-        <div className={styles.account}>
-          <div className={styles.balance}><span className={styles.balanceLabel}>Balance</span><strong>${user.wallet.balance.toFixed(2)}</strong></div>
-          <button
-            onClick={() => setActiveTab("profile")}
-            className={styles.profileButton}
-          >
-            <div className={styles.avatar}>
-              {user.username.slice(0, 2).toUpperCase()}
-            </div>
-            <span className={styles.profileName}>{user.username}</span>
-          </button>
-          <ThemeToggle compact />
-          <button onClick={handleLogout} className={`btn btn-ghost btn-sm ${styles.logout}`}>Log out</button>
-        </div>
-      </header>
+      <DashboardNav
+        user={user}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onLogout={handleLogout}
+        hasActiveOrders={orders.some(o => o.status === "COOLDOWN_ACTIVE")}
+        botUsername={BOT_USERNAME}
+      />
 
       <div className={styles.content}>
         <main className={styles.section}>
@@ -406,22 +381,13 @@ export default function Dashboard() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "14px", marginTop: "14px" }}>
                             <span style={{ fontSize: "20px", fontWeight: "700" }}>{formatPrice(product.price, product.currency)}</span>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-                              <button
-                                onClick={() => handleWalletBuy(product.id)}
-                                disabled={product.stockCount === 0}
-                                className="btn btn-secondary btn-sm"
-                                style={{ opacity: product.stockCount === 0 ? 0.4 : 1, width: "100%" }}
-                              >
-                                {product.stockCount === 0 ? "Out of Stock" : "Buy with Balance"}
-                              </button>
-                              <button
-                                onClick={() => { setSelectedProductForCrypto(product.id); setCryptoModalOpen(true); }}
-                                disabled={product.stockCount === 0}
+                              <Link
+                                href={`/dashboard/product/${product.id}`}
                                 className="btn btn-primary btn-sm"
-                                style={{ opacity: product.stockCount === 0 ? 0.4 : 1, width: "100%" }}
+                                style={{ width: "100%" }}
                               >
-                                {product.stockCount === 0 ? "Out of Stock" : "Pay with Crypto"}
-                              </button>
+                                View Product
+                              </Link>
                             </div>
                           </div>
                         </div>
