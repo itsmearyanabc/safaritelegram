@@ -10,7 +10,11 @@ function isUsableToken(token: string | undefined, placeholder: string): token is
   return Boolean(token && token !== placeholder && token.length > 10);
 }
 
+let isShuttingDown = false;
+const activeBots: any[] = [];
+
 function startBotWithRetry(bot: any, name: string) {
+  if (isShuttingDown) return;
   bot
     .start({
       onStart: (info: any) => {
@@ -18,6 +22,7 @@ function startBotWithRetry(bot: any, name: string) {
       },
     })
     .catch((err: any) => {
+      if (isShuttingDown) return;
       console.error(`❌ [${name}] Error:`, err.message);
       console.log(`🔄 [${name}] Retrying in 5 seconds...`);
       setTimeout(() => startBotWithRetry(bot, name), 5000);
@@ -26,6 +31,7 @@ function startBotWithRetry(bot: any, name: string) {
 
 declare global {
   var __telegram_bots_started: boolean;
+  var __telegram_bots_shutdown_registered: boolean;
 }
 
 export async function register() {
@@ -61,11 +67,13 @@ export async function register() {
 
       if (hasBot1) {
         const bot1 = createTelegramBot(token1, "Bot #1 (Customer)");
+        activeBots.push(bot1);
         startBotWithRetry(bot1, "Bot #1 - Customer");
       }
 
       if (hasBot2) {
         const bot2 = createTelegramBot(token2, "Bot #2 (Mirror)");
+        activeBots.push(bot2);
         startBotWithRetry(bot2, "Bot #2 - Mirror");
       }
     } catch (e) {
@@ -73,5 +81,25 @@ export async function register() {
     }
 
     console.log("=========================================");
+
+    if (!global.__telegram_bots_shutdown_registered) {
+      global.__telegram_bots_shutdown_registered = true;
+      const gracefulShutdown = async (signal: string) => {
+        if (isShuttingDown) return;
+        isShuttingDown = true;
+        console.log(`🛑 [Bots] ${signal} received. Stopping bots gracefully...`);
+        for (const bot of activeBots) {
+          try {
+            await bot.stop();
+          } catch (e) {
+            console.error("Error stopping bot:", e);
+          }
+        }
+        console.log(`✅ [Bots] Bots stopped successfully.`);
+      };
+
+      process.once("SIGTERM", () => gracefulShutdown("SIGTERM"));
+      process.once("SIGINT", () => gracefulShutdown("SIGINT"));
+    }
   }
 }
