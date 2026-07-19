@@ -100,6 +100,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, status: result.request.status, newBalance: result.wallet.balance });
   } catch (error: any) {
     console.error("Process deposit error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error during deposit processing" }, { status: 500 });
+    // Don't leak internal error details to the client
+    return NextResponse.json({ error: "Internal server error during deposit processing" }, { status: 500 });
   }
 }

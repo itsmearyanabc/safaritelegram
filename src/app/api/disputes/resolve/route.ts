@@ -38,11 +38,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Dispute not found" }, { status: 404 });
     }
 
-    if (dispute.status === "RESOLVED") {
-      return NextResponse.json({ error: "Dispute has already been resolved" }, { status: 400 });
-    }
-
     const resolvedDispute = await prisma.$transaction(async (tx) => {
+      // Atomic guard: claim the dispute as not-resolved inside the transaction
+      // to prevent double-refund race condition between concurrent admin requests
+      const claimed = await tx.dispute.updateMany({
+        where: { id: disputeId, status: { not: "RESOLVED" } },
+        data: { status: "RESOLVED" },
+      });
+      if (claimed.count !== 1) {
+        throw new Error("ALREADY_RESOLVED");
+      }
+
       // 1. Process resolution
       if (resolutionType === "REFUND" || resolutionType === "CREDIT") {
         const wallet = await tx.wallet.findUnique({
@@ -98,11 +104,10 @@ export async function POST(req: Request) {
         });
       }
 
-      // 2. Update dispute status to RESOLVED
+      // 2. Update dispute with resolution type (status already set atomically above)
       const updatedDispute = await tx.dispute.update({
         where: { id: disputeId },
         data: {
-          status: "RESOLVED",
           resolutionType,
         },
       });
@@ -113,6 +118,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, dispute: resolvedDispute });
   } catch (error: any) {
     console.error("Resolve dispute error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error resolving dispute" }, { status: 500 });
+    if (error.message === "ALREADY_RESOLVED") {
+      return NextResponse.json({ error: "Dispute has already been resolved" }, { status: 400 });
+    }
+    // Don't leak internal error details to the client
+    return NextResponse.json({ error: "Internal server error resolving dispute" }, { status: 500 });
   }
 }

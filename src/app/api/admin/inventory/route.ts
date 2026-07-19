@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getStockState } from "@/lib/stock";
 
 // POST: Add inventory items to a product
 export async function POST(req: NextRequest) {
@@ -38,10 +39,7 @@ export async function POST(req: NextRequest) {
     where: { productId, isAllocated: false },
   });
 
-  let stockState = "OUT_OF_STOCK";
-  if (availableCount >= 10) stockState = "IN_STOCK";
-  else if (availableCount >= 5) stockState = "LOW_STOCK";
-  else if (availableCount >= 1) stockState = "CRITICAL_STOCK";
+  const stockState = getStockState(availableCount);
 
   await prisma.product.update({
     where: { id: productId },

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { escapeTelegramMarkdown } from "@/lib/stock";
+import fs from "fs";
+import path from "path";
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +12,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orderId, message } = await req.json();
+    const { orderId, message, file, fileName, fileType } = await req.json();
 
     if (!orderId || !message) {
       return NextResponse.json({ error: "Order ID and message are required" }, { status: 400 });
@@ -25,6 +27,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    // Save file locally if provided
+    let fileUrl: string | null = null;
+    let localFileType: string | null = null;
+    let fileBuffer: Buffer | null = null;
+
+    if (file && fileName && fileType) {
+      // Decode base64 file
+      const matches = file.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+      const base64Data = matches ? matches[2] : file;
+      fileBuffer = Buffer.from(base64Data, "base64");
+
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "attachments");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const uniqueFileName = `${orderId}-${Date.now()}-${fileName}`;
+      const filePath = path.join(uploadDir, uniqueFileName);
+      fs.writeFileSync(filePath, fileBuffer);
+      fileUrl = `/uploads/attachments/${uniqueFileName}`;
+      localFileType = fileType;
+    }
+
     // Determine new status. If COOLDOWN_ACTIVE or PAID, progress to READY.
     let newStatus = order.status;
     if (["COOLDOWN_ACTIVE", "PAID"].includes(order.status)) {
@@ -35,6 +60,8 @@ export async function POST(req: Request) {
       where: { id: orderId },
       data: {
         adminMessage: message,
+        adminMessageFileUrl: fileUrl,
+        adminMessageFileType: localFileType,
         adminMessageSentAt: new Date(),
         status: newStatus,
       },
@@ -54,26 +81,65 @@ export async function POST(req: Request) {
             `\`${String(message).replace(/`/g, "'")}\`\n\n` +
             `Status updated to: *${escapeTelegramMarkdown(newStatus)}*`;
 
-          const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chat_id: order.user.telegramId,
-              text: telegramMessage,
-              parse_mode: "Markdown",
-            }),
-          });
+          if (fileBuffer && fileName && localFileType) {
+            // Send as file attachment using multipart FormData
+            const formData = new FormData();
+            formData.append("chat_id", order.user.telegramId);
 
-          const tgBody = (await tgRes.json().catch(() => null)) as {
-            ok?: boolean;
-            description?: string;
-          } | null;
+            // Determine method and field based on file type
+            let method = "sendDocument";
+            let field = "document";
 
-          if (tgRes.ok && tgBody?.ok) {
-            telegramSent = true;
+            if (localFileType.startsWith("image/")) {
+              method = "sendPhoto";
+              field = "photo";
+            } else if (localFileType.startsWith("video/")) {
+              method = "sendVideo";
+              field = "video";
+            }
+
+            const blob = new Blob([new Uint8Array(fileBuffer)], { type: localFileType });
+            formData.append(field, blob, fileName);
+            formData.append("caption", telegramMessage);
+            formData.append("parse_mode", "Markdown");
+
+            const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+              method: "POST",
+              body: formData,
+            });
+
+            const tgBody = (await tgRes.json().catch(() => null)) as {
+              ok?: boolean;
+              description?: string;
+            } | null;
+
+            if (tgRes.ok && tgBody?.ok) {
+              telegramSent = true;
+            } else {
+              telegramError = tgBody?.description || `Telegram HTTP ${tgRes.status}`;
+            }
           } else {
-            telegramError = tgBody?.description || `Telegram HTTP ${tgRes.status}`;
-            console.error("Telegram sendMessage failed:", telegramError);
+            // Send regular text message
+            const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: order.user.telegramId,
+                text: telegramMessage,
+                parse_mode: "Markdown",
+              }),
+            });
+
+            const tgBody = (await tgRes.json().catch(() => null)) as {
+              ok?: boolean;
+              description?: string;
+            } | null;
+
+            if (tgRes.ok && tgBody?.ok) {
+              telegramSent = true;
+            } else {
+              telegramError = tgBody?.description || `Telegram HTTP ${tgRes.status}`;
+            }
           }
         } catch (err) {
           telegramError = err instanceof Error ? err.message : "Telegram request failed";

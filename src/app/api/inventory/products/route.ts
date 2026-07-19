@@ -23,6 +23,16 @@ export async function GET() {
         const products = await Promise.all(
           category.products.map(async (product) => {
             const unallocatedCount = product.items.length;
+            const correctStock = getStockState(unallocatedCount);
+            let currentStockState = product.stockState;
+
+            if (product.stockState !== correctStock) {
+              await prisma.product.update({
+                where: { id: product.id },
+                data: { stockState: correctStock },
+              });
+              currentStockState = correctStock;
+            }
 
             return {
               id: product.id,
@@ -33,7 +43,7 @@ export async function GET() {
               formula: product.formula,
               casNumber: product.casNumber,
               imageUrl: product.imageUrl,
-              stockState: product.stockState,
+              stockState: currentStockState,
               stockCount: unallocatedCount,
             };
           })

@@ -17,8 +17,11 @@ async function main() {
   await prisma.user.deleteMany({});
 
   // Create default Admin account
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword || adminPassword.length < 8) {
+    throw new Error("ADMIN_PASSWORD env var must be set and at least 8 characters long");
+  }
   const salt = await bcrypt.genSalt(10);
-  const adminPassword = process.env.ADMIN_PASSWORD || "admin2026";
   const adminPasswordHash = await bcrypt.hash(adminPassword, salt);
 
   const admin = await prisma.user.create({
@@ -36,18 +39,23 @@ async function main() {
   });
 
   // Seed default settings
-  await prisma.setting.create({
-    data: {
-      key: "CRYPTO_WALLET_ADDRESS",
-      value: process.env.CRYPTO_WALLET_ADDRESS || "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-    },
-  });
+  const walletAddress = process.env.CRYPTO_WALLET_ADDRESS;
+  if (!walletAddress) {
+    console.warn("⚠️  CRYPTO_WALLET_ADDRESS not set — skipping default wallet address seed");
+  } else {
+    await prisma.setting.create({
+      data: {
+        key: "CRYPTO_WALLET_ADDRESS",
+        value: walletAddress,
+      },
+    });
+  }
 
   console.log("====================================================");
   console.log("   DATABASE RESET COMPLETE WITH FRESH ADMIN SEED   ");
   console.log("====================================================");
   console.log("Username: admin");
-  console.log(`Password: ${adminPassword}`);
+  console.log("Password: [HIDDEN — set via ADMIN_PASSWORD env var]");
   console.log("Role: SUPERADMIN");
   console.log("====================================================");
 }

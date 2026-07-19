@@ -18,15 +18,14 @@ export async function GET() {
         wallet: true,
       },
       orderBy: { username: "asc" },
+      take: 100,
     });
 
-    // Include password for admin support (plaintext stored for recovery)
     const safeUsers = users.map((u) => ({
       id: u.id,
       username: u.username,
       role: u.role,
       telegramUsername: u.telegramUsername,
-      passwordPlain: u.passwordPlain || null,
       wallet: u.wallet ? {
         id: u.wallet.id,
         balance: u.wallet.balance,

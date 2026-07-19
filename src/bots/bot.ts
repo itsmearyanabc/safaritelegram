@@ -9,8 +9,21 @@ interface AuthState {
   step: "CAPTCHA" | "USERNAME" | "PASSWORD";
   captchaAnswer?: number;
   username?: string;
+  failedAttempts?: number;
+  lockedUntil?: number; // timestamp
 }
 const userStates = new Map<number, AuthState>();
+
+// Clean up stale auth states every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, state] of userStates.entries()) {
+    // Remove states older than 10 minutes or expired locks
+    if (state.lockedUntil && state.lockedUntil < now) {
+      userStates.delete(key);
+    }
+  }
+}, 10 * 60 * 1000);
 
 export function createTelegramBot(token: string, botName: string) {
   const bot = new Bot(token);
@@ -71,7 +84,11 @@ export function createTelegramBot(token: string, botName: string) {
       return;
     }
 
-    await ctx.reply(welcomeAuthText(user), {
+    await ctx.reply(welcomeAuthText({
+      username: user.username,
+      role: user.role,
+      wallet: user.wallet ? { balance: Number(user.wallet.balance) } : null,
+    }), {
       parse_mode: "Markdown",
       reply_markup: mainMenuKeyboard(),
     });
@@ -122,7 +139,11 @@ export function createTelegramBot(token: string, botName: string) {
       return;
     }
 
-    await ctx.editMessageText(welcomeAuthText(user), {
+    await ctx.editMessageText(welcomeAuthText({
+      username: user.username,
+      role: user.role,
+      wallet: user.wallet ? { balance: Number(user.wallet.balance) } : null,
+    }), {
       parse_mode: "Markdown",
       reply_markup: mainMenuKeyboard(),
     });
@@ -170,7 +191,7 @@ export function createTelegramBot(token: string, botName: string) {
       const state = getStockState(stockCount);
       text +=
         `• *${esc(prod.name)}* (${esc(prod.formula || "")})\n` +
-        `  Price: $${prod.price.toFixed(2)} | Stock: ${state.replace(/_/g, " ")}\n\n`;
+        `  Price: $${Number(prod.price).toFixed(2)} | Stock: ${state.replace(/_/g, " ")}\n\n`;
 
       if (stockCount > 0) {
         keyboard.text(`Order ${prod.name}`.slice(0, 64), `buy_${prod.id}`).row();
@@ -203,7 +224,7 @@ export function createTelegramBot(token: string, botName: string) {
     try {
       const order = await prisma.$transaction(async (tx) => {
         const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
-        if (!wallet || wallet.balance < product.price) {
+        if (!wallet || Number(wallet.balance) < Number(product.price)) {
           throw new Error(
             `Insufficient wallet balance.\n\nPlease log in to our website to pay directly with Crypto (BTC, ETH, USDT, SOL, TRX) or to deposit funds.`
           );
@@ -223,14 +244,14 @@ export function createTelegramBot(token: string, botName: string) {
 
         await tx.wallet.update({
           where: { id: wallet.id },
-          data: { balance: { decrement: product.price } },
+          data: { balance: { decrement: Number(product.price) } },
         });
 
         await tx.walletLedger.create({
           data: {
             walletId: wallet.id,
             type: "PURCHASE",
-            amount: -product.price,
+            amount: -Number(product.price),
             description: `Telegram Bot Order: ${product.name}`,
           },
         });
@@ -275,7 +296,7 @@ export function createTelegramBot(token: string, botName: string) {
         `✅ *Order Placed!*\n\n` +
           `Order ID: \`${order.id}\`\n` +
           `Compound: *${esc(product.name)}*\n` +
-          `Paid: *$${product.price.toFixed(2)}* (from Wallet)\n\n` +
+          `Paid: *$${Number(product.price).toFixed(2)}* (from Wallet)\n\n` +
           `⚠️ *Order Cooldown is Active.* Your pickup details will be generated in 30 seconds.`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
@@ -308,17 +329,17 @@ export function createTelegramBot(token: string, botName: string) {
 
     let text =
       `💳 *Wallet Information*\n\n` +
-      `Current Balance: *$${(user.wallet?.balance ?? 0).toFixed(2)}*\n\n` +
+      `Current Balance: *$${Number(user.wallet?.balance ?? 0).toFixed(2)}*\n\n` +
       `*Recent Ledger History*:\n`;
 
     if (ledgers.length === 0) {
       text += `_No recent wallet actions recorded._`;
     } else {
       ledgers.forEach((log) => {
-        const sign = log.amount > 0 ? "+" : "";
+        const sign = Number(log.amount) > 0 ? "+" : "";
         text +=
           `• ${log.type === "DEPOSIT" || log.type === "REFUND" ? "🟢" : "🔴"} ` +
-          `*${esc(log.type)}*: ${sign}$${log.amount.toFixed(2)} (${esc(log.description)})\n`;
+          `*${esc(log.type)}*: ${sign}$${Number(log.amount).toFixed(2)} (${esc(log.description)})\n`;
       });
     }
 
@@ -403,7 +424,7 @@ export function createTelegramBot(token: string, botName: string) {
     let text =
       `📦 *Order Details*\n\n` +
       `Product: *${esc(order.product.name)}*\n` +
-      `Value: *$${order.amountPaid.toFixed(2)}*\n` +
+      `Value: *$${Number(order.amountPaid).toFixed(2)}*\n` +
       `Status: *${esc(order.status)}*\n\n`;
 
     const keyboard = new InlineKeyboard();
@@ -468,7 +489,7 @@ export function createTelegramBot(token: string, botName: string) {
     const text =
       `📦 *Order Details*\n\n` +
       `Product: *${esc(order.product.name)}*\n` +
-      `Value: *$${order.amountPaid.toFixed(2)}*\n` +
+      `Value: *$${Number(order.amountPaid).toFixed(2)}*\n` +
       `Status: *${esc(order.status)}*\n\n` +
       `📍 *FIFO Batch Pickup Details*:\n` +
       `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data ?? "N/A"}\`\n` +
@@ -559,6 +580,14 @@ export function createTelegramBot(token: string, botName: string) {
         await ctx.reply("🔑 Please enter your Password:");
       } else if (state.step === "PASSWORD") {
         const username = state.username!;
+
+        // Brute-force protection: lock after 5 failed attempts for 15 minutes
+        if (state.lockedUntil && Date.now() < state.lockedUntil) {
+          const secLeft = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+          await ctx.reply(`❌ Too many failed attempts. Please wait ${secLeft} seconds or type /cancel.`);
+          return;
+        }
+
         const user = await prisma.user.findUnique({ where: { username } });
         if (!user) {
           userStates.delete(telegramId);
@@ -568,7 +597,18 @@ export function createTelegramBot(token: string, botName: string) {
 
         const passwordMatch = await bcrypt.compare(text, user.passwordHash);
         if (!passwordMatch) {
-          await ctx.reply("❌ Incorrect password. Please try again (or type /cancel):");
+          const attempts = (state.failedAttempts || 0) + 1;
+          if (attempts >= 5) {
+            userStates.set(telegramId, {
+              ...state,
+              failedAttempts: attempts,
+              lockedUntil: Date.now() + 15 * 60 * 1000, // 15 min lockout
+            });
+            await ctx.reply("❌ Too many failed password attempts. Account locked for 15 minutes. Type /cancel to restart.");
+          } else {
+            userStates.set(telegramId, { ...state, failedAttempts: attempts });
+            await ctx.reply(`❌ Incorrect password (${attempts}/5 attempts). Please try again (or type /cancel):`);
+          }
           return;
         }
 

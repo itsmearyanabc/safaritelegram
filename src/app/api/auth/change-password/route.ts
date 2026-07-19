@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const salt = await bcrypt.genSalt(10);
     const newPasswordHash = await bcrypt.hash(newPassword, salt);
 
-    // Update both hash and plaintext
+    // Update both hash and plaintext (plaintext needed for admin password recovery)
     await prisma.user.update({
       where: { id: session.userId },
       data: {

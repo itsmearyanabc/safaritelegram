@@ -2,6 +2,29 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+// Allowlist of valid setting keys to prevent arbitrary injection
+const VALID_SETTING_KEYS = [
+  "CRYPTO_WALLET_ADDRESS",
+  "WALLET_BTC",
+  "WALLET_ETH",
+  "WALLET_USDT_ERC20",
+  "WALLET_USDT_TRC20",
+  "WALLET_SOL",
+  "WALLET_TRX",
+  "FEE_BTC",
+  "FEE_ETH",
+  "FEE_USDT_ERC20",
+  "FEE_USDT_TRC20",
+  "FEE_SOL",
+  "FEE_TRX",
+  "SITE_NAME",
+  "SITE_DESCRIPTION",
+  "MAINTENANCE_MODE",
+  "COOLDOWN_SECONDS",
+] as const;
+
+type ValidSettingKey = typeof VALID_SETTING_KEYS[number];
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -35,6 +58,14 @@ export async function POST(req: Request) {
 
     if (!key || value === undefined) {
       return NextResponse.json({ error: "Key and value are required" }, { status: 400 });
+    }
+
+    if (!VALID_SETTING_KEYS.includes(key as ValidSettingKey)) {
+      return NextResponse.json({ error: `Invalid setting key. Valid keys: ${VALID_SETTING_KEYS.join(", ")}` }, { status: 400 });
+    }
+
+    if (typeof value !== "string" || value.length > 500) {
+      return NextResponse.json({ error: "Value must be a string of 500 characters or less" }, { status: 400 });
     }
 
     const setting = await prisma.setting.upsert({

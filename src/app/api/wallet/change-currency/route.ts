@@ -23,6 +23,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
     }
 
+    // Prevent currency change when balance > 0 to avoid free-money exploit
+    // (e.g. $100 USD → €100 EUR without conversion)
+    if (Number(wallet.balance) > 0) {
+      return NextResponse.json(
+        { error: 'Cannot change currency while wallet has a balance. Please withdraw or spend your funds first.' },
+        { status: 400 }
+      );
+    }
+
     await prisma.wallet.update({
       where: { id: wallet.id },
       data: { currency }

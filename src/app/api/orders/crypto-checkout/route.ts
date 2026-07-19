@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         paymentMethod: "DIRECT_CRYPTO",
         cryptoCurrency: cryptoCurrency,
         networkFee: networkFee,
-        cryptoAmountDue: (product.price + networkFee).toFixed(2),
+        cryptoAmountDue: (Number(product.price) + networkFee).toFixed(2),
         paymentWalletAddress: walletSetting.value,
       },
       include: {
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
         cryptoName: cryptoInfo.name,
         network: cryptoInfo.network,
         networkFee: networkFee,
-        totalDue: product.price + networkFee,
+        totalDue: Number(product.price) + networkFee,
         walletAddress: walletSetting.value,
         status: order.status,
       },

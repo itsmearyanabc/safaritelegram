@@ -21,6 +21,7 @@ export async function GET() {
               inventoryItem: true,
             },
           },
+          messages: { orderBy: { createdAt: "asc" } },
         },
         orderBy: { createdAt: "desc" },
       });
@@ -33,6 +34,7 @@ export async function GET() {
               product: true,
             },
           },
+          messages: { orderBy: { createdAt: "asc" } },
         },
         orderBy: { createdAt: "desc" },
       });

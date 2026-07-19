@@ -27,14 +27,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized. You do not own this order." }, { status: 403 });
     }
 
-    // Create the dispute
-    const dispute = await prisma.dispute.create({
-      data: {
-        orderId,
-        userId: session.userId,
-        reason,
-        status: "OPEN",
-      },
+    // Prevent duplicate open disputes for the same order
+    const existingDispute = await prisma.dispute.findFirst({
+      where: { orderId, status: { in: ["OPEN", "INVESTIGATING"] } },
+    });
+    if (existingDispute) {
+      return NextResponse.json({ error: "An open dispute already exists for this order." }, { status: 400 });
+    }
+
+    // Create the dispute and seed initial message
+    const dispute = await prisma.$transaction(async (tx) => {
+      const d = await tx.dispute.create({
+        data: {
+          orderId,
+          userId: session.userId,
+          reason,
+          status: "OPEN",
+        },
+        include: { user: true }
+      });
+      await tx.disputeMessage.create({
+        data: {
+          disputeId: d.id,
+          senderRole: "CUSTOMER",
+          senderName: d.user.username,
+          message: reason,
+        }
+      });
+      return d;
     });
 
     return NextResponse.json({ success: true, dispute });

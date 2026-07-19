@@ -81,7 +81,7 @@ async function runAcceptanceTest() {
           where: { userId: testUser.id },
         });
 
-        if (!wallet || wallet.balance < testProduct.price) {
+        if (!wallet || Number(wallet.balance) < Number(testProduct.price)) {
           throw new Error(`Order #${orderNum}: Insufficient wallet balance`);
         }
 
@@ -98,7 +98,7 @@ async function runAcceptanceTest() {
         // Deduct balance
         await tx.wallet.update({
           where: { id: wallet.id },
-          data: { balance: { decrement: testProduct.price } },
+          data: { balance: { decrement: Number(testProduct.price) } },
         });
 
         // Add ledger record
@@ -106,7 +106,7 @@ async function runAcceptanceTest() {
           data: {
             walletId: wallet.id,
             type: "PURCHASE",
-            amount: -testProduct.price,
+            amount: -Number(testProduct.price),
             description: `Test purchase #${orderNum} of product ${testProduct.name}`,
           },
         });
@@ -126,7 +126,7 @@ async function runAcceptanceTest() {
             userId: testUser.id,
             productId: testProduct.id,
             inventoryItemId: item.id,
-            amountPaid: testProduct.price,
+            amountPaid: Number(testProduct.price),
             status: "READY", // Short-circuit cooldown for immediate test evaluation
           },
         });
@@ -149,9 +149,9 @@ async function runAcceptanceTest() {
       where: { userId: testUser.id },
     });
     const expectedBalance = initialBalance - (productPrice * totalTestItems);
-    const balanceMatch = finalWallet && Math.abs(finalWallet.balance - expectedBalance) < 0.01;
+    const balanceMatch = finalWallet && Math.abs(Number(finalWallet.balance) - expectedBalance) < 0.01;
     
-    console.log(`Audit A (Wallet Balance): Expected: $${expectedBalance.toFixed(2)}, Actual: $${finalWallet?.balance.toFixed(2)} - ${balanceMatch ? "SUCCESS ✅" : "FAIL ❌"}`);
+    console.log(`Audit A (Wallet Balance): Expected: $${expectedBalance.toFixed(2)}, Actual: $${Number(finalWallet?.balance ?? 0).toFixed(2)} - ${balanceMatch ? "SUCCESS ✅" : "FAIL ❌"}`);
 
     // Audit B: Verify total orders created
     const totalUserOrders = await prisma.order.count({

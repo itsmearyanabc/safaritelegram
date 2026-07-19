@@ -18,8 +18,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
-
   const [activeTab, setActiveTab] = useState<any>("shop"); // Mock active tab for nav
+  const [isFavorite, setIsFavorite] = useState(false);
 
   // Mock variants for the UI
   const mockVariants = [
@@ -61,12 +61,30 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
         const ordData = await ordRes.json();
         if (ordRes.ok) setOrders(ordData.orders || []);
 
+        // Load favorite status
+        if (foundProd) {
+          const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+          setIsFavorite(favs.includes(foundProd.id));
+        }
       } catch (err) {
         console.error(err);
       }
       setLoading(false);
     })();
   }, [id, router]);
+
+  const toggleFavorite = () => {
+    if (!product) return;
+    const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+    let newFavs;
+    if (isFavorite) {
+      newFavs = favs.filter((favId: string) => favId !== product.id);
+    } else {
+      newFavs = [...favs, product.id];
+    }
+    localStorage.setItem("favorites", JSON.stringify(newFavs));
+    setIsFavorite(!isFavorite);
+  };
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -160,7 +178,9 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                         {product.formula && <span style={{ fontSize: "14px", color: "var(--accent)", fontWeight: "500" }}>{product.formula}</span>}
                       </div>
                     </div>
-                    <button className="btn btn-secondary btn-sm">🤍 Add to Favorites</button>
+                    <button onClick={toggleFavorite} className="btn btn-secondary btn-sm">
+                      {isFavorite ? "❤️ Favorited" : "🤍 Add to Favorites"}
+                    </button>
                   </div>
 
                   <p style={{ color: "var(--text-secondary)", marginBottom: "24px", lineHeight: "1.6" }}>
@@ -210,7 +230,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                               <button 
                                 onClick={() => handleBuy(v.price)}
                                 className="btn btn-primary btn-sm" 
-                                style={{ minWidth: "80px", color: "#fff" }} // Overriding the color for this specific mockup
+                                style={{ minWidth: "80px" }}
                               >
                                 {v.price}$
                               </button>

@@ -24,10 +24,18 @@ interface Order {
   product: Product;
   inventoryItem: { id: string; mediaUrl: string | null; locationData: string | null; data: string } | null;
 }
+interface DisputeMessage {
+  id: string;
+  senderRole: string;
+  senderName: string;
+  message: string;
+  createdAt: string;
+}
 interface Dispute {
   id: string; orderId: string; reason: string; status: string;
   resolutionType: string | null; createdAt: string;
   order: { product: Product };
+  messages?: DisputeMessage[];
 }
 
 type Tab = "shop" | "wallet" | "orders" | "disputes" | "profile" | "settings";
@@ -47,6 +55,13 @@ export default function Dashboard() {
   const [depositAmount, setDepositAmount] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
   const [selectedOrderIdForDispute, setSelectedOrderIdForDispute] = useState<string | null>(null);
+  
+  // Raise Ticket states
+  const [raiseTicketOpen, setRaiseTicketOpen] = useState(false);
+  const [raiseTicketOrderId, setRaiseTicketOrderId] = useState("");
+  const [raiseTicketReason, setRaiseTicketReason] = useState("");
+  const [disputeMessageTexts, setDisputeMessageTexts] = useState<Record<string, string>>({}); // disputeId -> messageText
+
   const [walletMessage, setWalletMessage] = useState("");
   const [shopMsg, setShopMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -287,6 +302,45 @@ export default function Dashboard() {
       const r = await fetch("/api/disputes/submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: selectedOrderIdForDispute, reason: disputeReason }) });
       if (r.ok) { setSelectedOrderIdForDispute(null); setDisputeReason(""); loadDisputesData(); loadOrdersData(); setActiveTab("disputes"); }
     } catch {}
+  };
+
+  const handleSendDisputeMessage = async (disputeId: string) => {
+    const text = (disputeMessageTexts[disputeId] || "").trim();
+    if (!text) return;
+    try {
+      const r = await fetch("/api/disputes/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeId, message: text })
+      });
+      if (r.ok) {
+        setDisputeMessageTexts(prev => ({ ...prev, [disputeId]: "" }));
+        loadDisputesData();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRaiseTicketSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!raiseTicketOrderId || !raiseTicketReason.trim()) return;
+    try {
+      const r = await fetch("/api/disputes/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: raiseTicketOrderId, reason: raiseTicketReason })
+      });
+      if (r.ok) {
+        setRaiseTicketOpen(false);
+        setRaiseTicketOrderId("");
+        setRaiseTicketReason("");
+        loadDisputesData();
+        loadOrdersData();
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   if (loading || !user) {
@@ -749,6 +803,19 @@ export default function Dashboard() {
                           <p style={{ fontSize: "14px", color: "var(--text-primary)", whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
                             {(order as any).adminMessage}
                           </p>
+                          {(order as any).adminMessageFileUrl && (
+                            <div style={{ marginTop: "12px" }}>
+                              {(order as any).adminMessageFileType?.startsWith("image/") ? (
+                                <img src={(order as any).adminMessageFileUrl} alt="Delivery attachment" style={{ maxWidth: "100%", maxHeight: "250px", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                              ) : (order as any).adminMessageFileType?.startsWith("video/") ? (
+                                <video src={(order as any).adminMessageFileUrl} controls style={{ maxWidth: "100%", maxHeight: "250px", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                              ) : (
+                                <a href={(order as any).adminMessageFileUrl} download className="btn btn-secondary btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                  📥 Download Attachment ({(order as any).adminMessageFileType?.split("/")[1]?.toUpperCase() || "File"})
+                                </a>
+                              )}
+                            </div>
+                          )}
                           {(order as any).adminMessageSentAt && (
                             <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "8px", textAlign: "right" }}>
                               Sent at {new Date((order as any).adminMessageSentAt).toLocaleString()}
@@ -791,7 +858,41 @@ export default function Dashboard() {
           {/* DISPUTES */}
           {activeTab === "disputes" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-              <h2>Disputes</h2>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h2>Support Tickets & Disputes</h2>
+                {!raiseTicketOpen && !selectedOrderIdForDispute && (
+                  <button onClick={() => setRaiseTicketOpen(true)} className="btn btn-primary btn-sm">
+                    🎟 Raise a Ticket
+                  </button>
+                )}
+              </div>
+
+              {raiseTicketOpen && (
+                <div className="card">
+                  <h3 style={{ marginBottom: "12px" }}>Raise a Support Ticket</h3>
+                  <form onSubmit={handleRaiseTicketSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Select Order</label>
+                      <select className="form-input" value={raiseTicketOrderId} onChange={e => setRaiseTicketOrderId(e.target.value)} required>
+                        <option value="">Choose an order...</option>
+                        {orders.map(o => (
+                          <option key={o.id} value={o.id}>
+                            Order #{o.id.slice(0,8)} - {o.product.name} ({formatPrice(o.amountPaid, user?.wallet?.currency || "USD")})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Describe your problem</label>
+                      <textarea className="form-input" rows={3} value={raiseTicketReason} onChange={e => setRaiseTicketReason(e.target.value)} required placeholder="Describe what went wrong or what you need support with..." />
+                    </div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button type="submit" className="btn btn-primary btn-sm">Submit Ticket</button>
+                      <button type="button" onClick={() => setRaiseTicketOpen(false)} className="btn btn-ghost btn-sm">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
               {selectedOrderIdForDispute && (
                 <div className="card">
@@ -809,26 +910,73 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {disputes.length === 0 && !selectedOrderIdForDispute ? (
+              {disputes.length === 0 && !selectedOrderIdForDispute && !raiseTicketOpen ? (
                 <div className="card" style={{ textAlign: "center", padding: "60px" }}>
-                  <p style={{ color: "var(--text-secondary)" }}>No disputes filed.</p>
+                  <p style={{ color: "var(--text-secondary)" }}>No disputes or tickets raised.</p>
                 </div>
               ) : (
                 disputes.map(d => (
-                  <div key={d.id} className="card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      <h4>{d.order.product.name}</h4>
-                      <span className={`badge ${d.status === "RESOLVED" ? "badge-green" : "badge-orange"}`}>{d.status}</span>
+                  <div key={d.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
+                      <div>
+                        <h4 style={{ marginBottom: "4px" }}>Ticket for {d.order.product.name}</h4>
+                        <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Order ID: #{d.orderId.slice(0,8)}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <span className={`badge ${d.status === "RESOLVED" ? "badge-green" : "badge-orange"}`}>{d.status}</span>
+                        {d.status === "RESOLVED" && d.resolutionType && (
+                          <span className="badge badge-blue">{d.resolutionType}</span>
+                        )}
+                      </div>
                     </div>
-                    <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                      &quot;{d.reason}&quot;
-                    </p>
-                    <p style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-                      Filed {new Date(d.createdAt).toLocaleString()}
-                    </p>
-                    {d.status === "RESOLVED" && (
-                      <div className={d.resolutionType === "REJECTED" ? "alert alert-error" : "alert alert-success"} style={{ marginTop: "10px", marginBottom: 0 }}>
-                        Resolution: <strong>{d.resolutionType}</strong>
+
+                    {/* Chat Thread */}
+                    <div style={{
+                      display: "flex", flexDirection: "column", gap: "12px",
+                      maxHeight: "300px", overflowY: "auto", padding: "12px",
+                      background: "var(--bg-secondary)", borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--border)"
+                    }}>
+                      {d.messages && d.messages.length > 0 ? (
+                        d.messages.map((m: any) => {
+                          const isMe = m.senderRole === "CUSTOMER";
+                          return (
+                            <div key={m.id} style={{
+                              alignSelf: isMe ? "flex-end" : "flex-start",
+                              maxWidth: "80%",
+                              background: isMe ? "var(--accent)" : "var(--bg-tertiary)",
+                              color: isMe ? "#fff" : "var(--text-primary)",
+                              padding: "10px 14px",
+                              borderRadius: isMe ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                              boxShadow: "var(--shadow-sm)"
+                            }}>
+                              <span style={{ display: "block", fontSize: "10px", opacity: 0.8, fontWeight: "bold", marginBottom: "4px" }}>
+                                {m.senderName} ({m.senderRole})
+                              </span>
+                              <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.4" }}>{m.message}</p>
+                              <span style={{ display: "block", fontSize: "9px", opacity: 0.6, marginTop: "4px", textAlign: "right" }}>
+                                {new Date(m.createdAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p style={{ color: "var(--text-secondary)", fontSize: "12px", textAlign: "center", margin: "16px 0" }}>No messages yet.</p>
+                      )}
+                    </div>
+
+                    {/* Send Message Area */}
+                    {d.status !== "RESOLVED" && (
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Type your message..."
+                          value={disputeMessageTexts[d.id] || ""}
+                          onChange={e => setDisputeMessageTexts(prev => ({ ...prev, [d.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") handleSendDisputeMessage(d.id); }}
+                        />
+                        <button onClick={() => handleSendDisputeMessage(d.id)} className="btn btn-primary btn-sm">Send</button>
                       </div>
                     )}
                   </div>

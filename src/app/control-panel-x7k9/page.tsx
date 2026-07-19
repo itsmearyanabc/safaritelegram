@@ -27,6 +27,7 @@ export default function ClientAdminPanel() {
   // Local UI states
   const [adminMessages, setAdminMessages] = useState<Record<string, string>>({});
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [adminFiles, setAdminFiles] = useState<Record<string, { base64: string; name: string; type: string }>>({});
   const [cryptoAddress, setCryptoAddress] = useState("");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -38,6 +39,7 @@ export default function ClientAdminPanel() {
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editProductData, setEditProductData] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", imageUrl: "", stockState: "OUT_OF_STOCK" });
+  const [disputeMessageTexts, setDisputeMessageTexts] = useState<Record<string, string>>({});
 
   const [cryptoSettings, setCryptoSettings] = useState({
     WALLET_BTC: "", FEE_BTC: "0",
@@ -109,11 +111,19 @@ export default function ClientAdminPanel() {
     const message = (adminMessages[orderId] ?? fallbackMessage ?? "").trim();
     if (!message) return;
 
+    const fileData = adminFiles[orderId];
+
     setMsg(null);
     try {
       const res = await fetch("/api/client-admin/orders/send-message", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, message })
+        body: JSON.stringify({
+          orderId,
+          message,
+          file: fileData ? fileData.base64 : undefined,
+          fileName: fileData ? fileData.name : undefined,
+          fileType: fileData ? fileData.type : undefined
+        })
       });
       const data = await res.json();
       if (!res.ok) { setMsg({ type: "error", text: data.error }); return; }
@@ -130,6 +140,11 @@ export default function ClientAdminPanel() {
       }
       fetchAll();
       setAdminMessages(prev => ({ ...prev, [orderId]: "" }));
+      setAdminFiles(prev => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
     } catch (e) {
       setMsg({ type: "error", text: "Failed to send message" });
     }
@@ -291,6 +306,61 @@ export default function ClientAdminPanel() {
         const d = await res.json(); setMsg({ type: "error", text: d.error });
       }
     } catch (e) { setMsg({ type: "error", text: "Error adding inventory" }); }
+  };
+
+  const handleSendDisputeMessage = async (disputeId: string) => {
+    const text = (disputeMessageTexts[disputeId] || "").trim();
+    if (!text) return;
+    try {
+      const res = await fetch("/api/disputes/message", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeId, message: text })
+      });
+      if (res.ok) {
+        setDisputeMessageTexts(prev => ({ ...prev, [disputeId]: "" }));
+        fetchAll();
+      } else {
+        const d = await res.json(); setMsg({ type: "error", text: d.error });
+      }
+    } catch {
+      setMsg({ type: "error", text: "Failed to send message" });
+    }
+  };
+
+  const handleResolveDispute = async (disputeId: string, resolutionType: "REFUND" | "CREDIT" | "REPLACEMENT" | "REJECTED") => {
+    try {
+      const res = await fetch("/api/disputes/resolve", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeId, resolutionType })
+      });
+      if (res.ok) {
+        setMsg({ type: "success", text: `Dispute resolved as ${resolutionType}!` });
+        fetchAll();
+      } else {
+        const d = await res.json(); setMsg({ type: "error", text: d.error });
+      }
+    } catch {
+      setMsg({ type: "error", text: "Failed to resolve dispute" });
+    }
+  };
+  const handleFileChange = (orderId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        setAdminFiles(prev => ({
+          ...prev,
+          [orderId]: {
+            base64,
+            name: file.name,
+            type: file.type
+          }
+        }));
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   if (loading || !user) {
@@ -659,6 +729,21 @@ export default function ClientAdminPanel() {
                                 onChange={(e) => setAdminMessages(prev => ({ ...prev, [order.id]: e.target.value }))}
                                 style={{ marginBottom: "12px" }}
                               />
+                              <div style={{ marginBottom: "12px" }}>
+                                <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+                                  📎 Attach File (Photo/Video/PDF)
+                                  <input 
+                                    type="file" 
+                                    onChange={(e) => handleFileChange(order.id, e)} 
+                                    style={{ display: "none" }} 
+                                  />
+                                </label>
+                                {adminFiles[order.id] && (
+                                  <span style={{ marginLeft: "8px", fontSize: "12px", color: "var(--green)" }}>
+                                    ✓ {adminFiles[order.id].name}
+                                  </span>
+                                )}
+                              </div>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
                                   {order.orderSource === "TELEGRAM" && order.user.telegramId 
@@ -885,22 +970,87 @@ export default function ClientAdminPanel() {
           {/* DISPUTES */}
           {activeTab === "disputes" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px", animation: "fadeIn 0.4s ease" }}>
-              <h2 style={{ fontSize: "28px" }}>Dispute Logs</h2>
-              <div className="card">
+              <h2 style={{ fontSize: "28px" }}>Dispute Logs ({disputes.length})</h2>
+              <div className="card" style={{ padding: "20px" }}>
                 {disputes.length === 0 ? (
                   <p style={{ color: "var(--text-secondary)", textAlign: "center", padding: "40px 0" }}>No disputes recorded.</p>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     {disputes.map(d => (
-                      <div key={d.id} style={{ padding: "16px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-primary)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                          <span style={{ fontWeight: "600" }}>{d.user.username} <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>disputed Order #{d.order.id.slice(0,8)}</span></span>
+                      <div key={d.id} style={{ padding: "20px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-primary)", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: "600", fontSize: "15px" }}>
+                            👤 {d.user.username} <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>disputed Order #{d.order.id.slice(0,8)} ({d.order.product.name})</span>
+                          </span>
                           <span className={`badge ${d.status === "RESOLVED" ? "badge-green" : "badge-orange"}`}>{d.status}</span>
                         </div>
-                        <p style={{ color: "var(--text-secondary)", fontStyle: "italic", marginBottom: "8px" }}>"{d.reason}"</p>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-tertiary)" }}>
-                          <span>Resolution: <strong style={{ color: "var(--text-primary)" }}>{d.resolutionType || "Pending"}</strong></span>
-                          <span>{new Date(d.createdAt).toLocaleString()}</span>
+                        <p style={{ color: "var(--text-secondary)", fontSize: "14px", fontStyle: "italic", margin: 0, paddingLeft: "4px" }}>
+                          Description: "{d.reason}"
+                        </p>
+
+                        {/* Dispute Chat Thread */}
+                        <div style={{
+                          display: "flex", flexDirection: "column", gap: "8px",
+                          maxHeight: "220px", overflowY: "auto", padding: "10px",
+                          background: "var(--bg-secondary)", borderRadius: "var(--radius-md)",
+                          border: "1px solid var(--border)", marginTop: "8px"
+                        }}>
+                          {d.messages && d.messages.length > 0 ? (
+                            d.messages.map((m: any) => {
+                              const isAdmin = m.senderRole === "ADMIN";
+                              return (
+                                <div key={m.id} style={{
+                                  alignSelf: isAdmin ? "flex-end" : "flex-start",
+                                  maxWidth: "80%",
+                                  background: isAdmin ? "var(--accent)" : "var(--bg-tertiary)",
+                                  color: isAdmin ? "#fff" : "var(--text-primary)",
+                                  padding: "8px 12px",
+                                  borderRadius: isAdmin ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+                                  fontSize: "13px"
+                                }}>
+                                  <strong style={{ display: "block", fontSize: "9px", opacity: 0.8, marginBottom: "2px" }}>{m.senderName}</strong>
+                                  <span>{m.message}</span>
+                                  <span style={{ display: "block", fontSize: "8px", opacity: 0.6, marginTop: "2px", textAlign: "right" }}>
+                                    {new Date(m.createdAt).toLocaleTimeString()}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <p style={{ color: "var(--text-secondary)", fontSize: "11px", textAlign: "center", margin: "8px 0" }}>No conversation messages.</p>
+                          )}
+                        </div>
+
+                        {/* Admin Message Reply Input */}
+                        {d.status !== "RESOLVED" && (
+                          <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="Type a message to customer..."
+                              value={disputeMessageTexts[d.id] || ""}
+                              onChange={e => setDisputeMessageTexts(prev => ({ ...prev, [d.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === "Enter") handleSendDisputeMessage(d.id); }}
+                            />
+                            <button onClick={() => handleSendDisputeMessage(d.id)} className="btn btn-primary btn-sm">Reply</button>
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
+                          <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                            Resolved: <strong style={{ color: d.resolutionType ? "var(--text-primary)" : "var(--text-tertiary)" }}>{d.resolutionType || "Pending"}</strong>
+                          </span>
+                          
+                          {d.status !== "RESOLVED" ? (
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <button onClick={() => handleResolveDispute(d.id, "REFUND")} className="btn btn-secondary btn-sm" style={{ color: "var(--green)" }}>Refund</button>
+                              <button onClick={() => handleResolveDispute(d.id, "CREDIT")} className="btn btn-secondary btn-sm" style={{ color: "var(--blue)" }}>Credit</button>
+                              <button onClick={() => handleResolveDispute(d.id, "REPLACEMENT")} className="btn btn-secondary btn-sm" style={{ color: "var(--purple)" }}>Replace</button>
+                              <button onClick={() => handleResolveDispute(d.id, "REJECTED")} className="btn btn-secondary btn-sm" style={{ color: "var(--red)" }}>Reject</button>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Closed {new Date(d.updatedAt).toLocaleDateString()}</span>
+                          )}
                         </div>
                       </div>
                     ))}

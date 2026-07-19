@@ -27,7 +27,7 @@ export async function GET() {
     }
 
     const completedOrders = user.orders.filter(o => ["PAID", "READY", "COMPLETED"].includes(o.status));
-    const totalSpent = completedOrders.reduce((sum, o) => sum + o.amountPaid, 0);
+    const totalSpent = completedOrders.reduce((sum, o) => sum + Number(o.amountPaid), 0);
 
     return NextResponse.json({
       user: {

@@ -14,6 +14,7 @@ export async function GET() {
       product: { select: { name: true, price: true } },
     },
     orderBy: { createdAt: "desc" },
+    take: 100,
   });
 
   return NextResponse.json({ orders });
