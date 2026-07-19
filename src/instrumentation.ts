@@ -36,6 +36,11 @@ export async function register() {
     }
     global.__telegram_bots_started = true;
 
+    if (process.env.DISABLE_EMBEDDED_BOTS === "true") {
+      console.log("⚠️ [Bots] Embedded bots disabled via DISABLE_EMBEDDED_BOTS=true");
+      return;
+    }
+
     const token1 = process.env.TELEGRAM_BOT_1_TOKEN?.trim().replace(/^["']|["']$/g, "");
     const token2 = process.env.TELEGRAM_BOT_2_TOKEN?.trim().replace(/^["']|["']$/g, "");
 
