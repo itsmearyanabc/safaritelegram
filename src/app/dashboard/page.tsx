@@ -573,7 +573,7 @@ export default function Dashboard() {
                   <div className="card" style={{ border: "1px solid var(--accent)", background: "rgba(0, 113, 227, 0.05)" }}>
                     <h3 style={{ marginBottom: "12px", color: "var(--accent)" }}>💵 Send Crypto Payment</h3>
                     <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "16px" }}>
-                      Your deposit of <strong>${pendingDeposit.amount.toFixed(2)}</strong> is currently <strong>PENDING verification</strong>. Please transfer the amount to the address below:
+                      Your deposit of <strong>${Number(pendingDeposit.amount).toFixed(2)}</strong> is currently <strong>PENDING verification</strong>. Please transfer the amount to the address below:
                     </p>
                     
                     <div style={{ marginBottom: "16px" }}>
@@ -1035,12 +1035,12 @@ export default function Dashboard() {
                 </div>
                 <div className="card stat-card" style={{ borderTop: "3px solid var(--green)" }}>
                   <p style={{ fontSize: "24px", marginBottom: "4px" }}>📈</p>
-                  <p className="stat-value" style={{ color: "var(--green)" }}>${(user.totalSpent || 0).toFixed(2)}</p>
+                  <p className="stat-value" style={{ color: "var(--green)" }}>${Number(user.totalSpent || 0).toFixed(2)}</p>
                   <p className="stat-label">Total Spent</p>
                 </div>
                 <div className="card stat-card" style={{ borderTop: "3px solid var(--purple)" }}>
                   <p style={{ fontSize: "24px", marginBottom: "4px" }}>💰</p>
-                  <p className="stat-value" style={{ color: "var(--purple)" }}>${user.wallet.balance.toFixed(2)}</p>
+                  <p className="stat-value" style={{ color: "var(--purple)" }}>${Number(user.wallet?.balance || 0).toFixed(2)}</p>
                   <p className="stat-label">Current Balance</p>
                 </div>
               </div>

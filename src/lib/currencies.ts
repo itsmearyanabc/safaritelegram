@@ -13,8 +13,8 @@ export function getCurrencySymbol(code: string): string {
   return FIAT_CURRENCIES[code]?.symbol || "$";
 }
 
-export function formatPrice(amount: number, currencyCode = "USD"): string {
-  return `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`;
+export function formatPrice(amount: number | string | any, currencyCode = "USD"): string {
+  return `${getCurrencySymbol(currencyCode)}${Number(amount).toFixed(2)}`;
 }
 
 export interface CryptoInfo {

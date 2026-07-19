@@ -447,7 +447,7 @@ export default function ClientAdminPanel() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px" }}>
                 <div className="card stat-card" style={{ padding: "32px 24px" }}>
                   <p className="stat-label" style={{ fontSize: "14px", textTransform: "uppercase" }}>Net Sales Revenue</p>
-                  <p className="stat-value" style={{ color: "var(--green)", fontSize: "40px", marginTop: "8px" }}>${stats.totalSales.toFixed(2)}</p>
+                  <p className="stat-value" style={{ color: "var(--green)", fontSize: "40px", marginTop: "8px" }}>${Number(stats.totalSales).toFixed(2)}</p>
                 </div>
                 <div className="card stat-card" style={{ padding: "32px 24px" }}>
                   <p className="stat-label" style={{ fontSize: "14px", textTransform: "uppercase" }}>Active Orders</p>
@@ -584,7 +584,7 @@ export default function ClientAdminPanel() {
                         <tr>
                           <td><strong>{p.name}</strong></td>
                           <td>{p.categoryName}</td>
-                          <td style={{ fontWeight: "600", color: "var(--green)" }}>{p.currency === "EUR" ? "€" : p.currency === "GBP" ? "£" : "$"}{p.price.toFixed(2)}</td>
+                          <td style={{ fontWeight: "600", color: "var(--green)" }}>{p.currency === "EUR" ? "€" : p.currency === "GBP" ? "£" : "$"}{Number(p.price).toFixed(2)}</td>
                           <td><span className={`badge badge-${p.stockState.toLowerCase()}`}>{p.stockState}</span></td>
                           <td>{p.availableItems} / {p.totalItems}</td>
                           <td>
@@ -668,7 +668,7 @@ export default function ClientAdminPanel() {
                               <span className="badge badge-green">💳 Wallet</span>
                             )}
                           </div>
-                          <span style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>Ordered {order.product.name} • ${order.amountPaid.toFixed(2)} • {new Date(order.createdAt).toLocaleString()}</span>
+                          <span style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>Ordered {order.product.name} • ${Number(order.amountPaid).toFixed(2)} • {new Date(order.createdAt).toLocaleString()}</span>
                         </div>
                         <div>
                           <span style={{ fontSize: "20px", color: "var(--text-tertiary)", transform: expandedOrderId === order.id ? "rotate(180deg)" : "rotate(0deg)", display: "inline-block", transition: "transform 0.2s ease" }}>↓</span>
@@ -788,7 +788,7 @@ export default function ClientAdminPanel() {
                         <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--text-tertiary)" }}>{o.id.slice(0, 8)}</td>
                         <td style={{ fontWeight: "500" }}>{o.user.username}</td>
                         <td>{o.product.name}</td>
-                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${o.amountPaid.toFixed(2)}</td>
+                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${Number(o.amountPaid).toFixed(2)}</td>
                         <td>
                           {o.paymentMethod === "DIRECT_CRYPTO" ? `Crypto (${o.cryptoCurrency || "N/A"})` : "Wallet"}
                         </td>
@@ -839,9 +839,9 @@ export default function ClientAdminPanel() {
                             </div>
                           ) : <span style={{ color: "var(--text-tertiary)" }}>N/A</span>}
                         </td>
-                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${u.wallet?.balance?.toFixed(2) || '0.00'}</td>
+                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${Number(u.wallet?.balance || 0).toFixed(2)}</td>
                         <td>{u.totalOrders}</td>
-                        <td style={{ fontWeight: "600" }}>${(u.totalSpent || 0).toFixed(2)}</td>
+                        <td style={{ fontWeight: "600" }}>${Number(u.totalSpent || 0).toFixed(2)}</td>
                         <td style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                       </tr>
                     ))}
@@ -932,7 +932,7 @@ export default function ClientAdminPanel() {
                               </span>
                             )}
                           </td>
-                          <td style={{ fontWeight: "600", color: "var(--green)" }}>${req.amount.toFixed(2)}</td>
+                          <td style={{ fontWeight: "600", color: "var(--green)" }}>${Number(req.amount).toFixed(2)}</td>
                           <td>
                             <span className={`badge ${
                               req.status === "APPROVED" ? "badge-green" :

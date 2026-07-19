@@ -35,8 +35,15 @@ declare global {
 }
 
 export async function register() {
-  // Only run on the Node.js server runtime (not Edge, not during build)
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    if (
+      process.env.NEXT_PHASE === "phase-production-build" || 
+      process.env.npm_lifecycle_event === "build" || 
+      process.argv.includes("build")
+    ) {
+      return;
+    }
+    
     if (global.__telegram_bots_started) {
       return;
     }
