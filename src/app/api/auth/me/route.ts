@@ -33,6 +33,7 @@ export async function GET() {
       user: {
         id: user.id,
         username: user.username,
+        avatarUrl: (user as any).avatarUrl,
         role: user.role,
         telegramUsername: user.telegramUsername,
         telegramId: user.telegramId,
@@ -41,6 +42,7 @@ export async function GET() {
         totalSpent,
         wallet: {
           balance: user.wallet?.balance || 0.0,
+          currency: user.wallet?.currency || "USD",
         },
       },
     });

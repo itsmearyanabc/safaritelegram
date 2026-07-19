@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import DashboardNav from "@/components/DashboardNav";
@@ -10,7 +10,8 @@ import styles from "../../dashboard.module.css";
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "SafariBoys_bot";
 
-export default function ProductPage({ params }: { params: { id: string } }) {
+export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [product, setProduct] = useState<any>(null);
@@ -48,7 +49,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
         let foundProd = null;
         if (prodData.categories) {
           for (const cat of prodData.categories) {
-            const p = cat.products.find((p: any) => p.id === params.id);
+            const p = cat.products.find((p: any) => p.id === id);
             if (p) {
               foundProd = p;
               break;
@@ -65,7 +66,7 @@ export default function ProductPage({ params }: { params: { id: string } }) {
       }
       setLoading(false);
     })();
-  }, [params.id, router]);
+  }, [id, router]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });

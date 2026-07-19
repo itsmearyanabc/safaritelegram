@@ -7,9 +7,6 @@ export interface CurrencyInfo {
 export const FIAT_CURRENCIES: Record<string, CurrencyInfo> = {
   USD: { code: "USD", symbol: "$", name: "US Dollar" },
   EUR: { code: "EUR", symbol: "€", name: "Euro" },
-  GBP: { code: "GBP", symbol: "£", name: "British Pound" },
-  AUD: { code: "AUD", symbol: "A$", name: "Australian Dollar" },
-  CAD: { code: "CAD", symbol: "C$", name: "Canadian Dollar" },
 };
 
 export function getCurrencySymbol(code: string): string {

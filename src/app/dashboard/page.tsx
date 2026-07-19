@@ -306,6 +306,30 @@ export default function Dashboard() {
     { key: "settings", label: "Settings", icon: "⚙️" },
   ];
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result;
+      if (!base64) return;
+      try {
+        const res = await fetch('/api/auth/update-avatar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64 })
+        });
+        if (res.ok) {
+          const dMe = await (await fetch('/api/auth/me')).json();
+          if (dMe.user) setUser(dMe.user);
+        }
+      } catch (err) {
+        console.error("Avatar upload failed", err);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className={styles.shell}>
       {/* Header */}
@@ -379,7 +403,7 @@ export default function Dashboard() {
                             )}
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "14px", marginTop: "14px" }}>
-                            <span style={{ fontSize: "20px", fontWeight: "700" }}>{formatPrice(product.price, product.currency)}</span>
+                            <span style={{ fontSize: "20px", fontWeight: "700" }}>{formatPrice(product.price, user?.wallet?.currency || "USD")}</span>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
                               <Link
                                 href={`/dashboard/product/${product.id}`}
@@ -442,17 +466,17 @@ export default function Dashboard() {
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                             <div>
                               <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Order Amount</p>
-                              <p style={{ fontWeight: "600", color: "var(--green)" }}>${cryptoPaymentInfo.amountPaid.toFixed(2)}</p>
+                              <p style={{ fontWeight: "600", color: "var(--green)" }}>{formatPrice(cryptoPaymentInfo.amountPaid, user?.wallet?.currency || "USD")}</p>
                             </div>
                             <div>
                               <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Network Fee (est.)</p>
-                              <p style={{ fontWeight: "600", color: "var(--orange)" }}>${cryptoPaymentInfo.networkFee.toFixed(2)}</p>
+                              <p style={{ fontWeight: "600", color: "var(--orange)" }}>{formatPrice(cryptoPaymentInfo.networkFee, user?.wallet?.currency || "USD")}</p>
                             </div>
                           </div>
 
                           <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                             <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Total Payable ({cryptoPaymentInfo.cryptoName})</p>
-                            <p style={{ fontWeight: "800", fontSize: "20px", color: "var(--accent)" }}>${cryptoPaymentInfo.totalDue.toFixed(2)} <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "400" }}>in {cryptoPaymentInfo.cryptoName}</span></p>
+                            <p style={{ fontWeight: "800", fontSize: "20px", color: "var(--accent)" }}>{formatPrice(cryptoPaymentInfo.totalDue, user?.wallet?.currency || "USD")} <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "400" }}>in {cryptoPaymentInfo.cryptoName}</span></p>
                           </div>
                         </div>
 
@@ -520,7 +544,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="card">
                     <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>Available Balance</p>
-                    <h1 style={{ color: "var(--green)", marginBottom: "24px" }}>${user.wallet.balance.toFixed(2)}</h1>
+                    <h1 style={{ color: "var(--green)", marginBottom: "24px" }}>{formatPrice(user.wallet.balance, user.wallet.currency || "USD")}</h1>
 
                     {walletMessage && (
                       <div className={walletMessage.startsWith("Error") ? "alert alert-error" : "alert alert-success"}>
@@ -530,7 +554,7 @@ export default function Dashboard() {
 
                     <form onSubmit={handleDeposit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Deposit Amount ($)</label>
+                        <label className="form-label">Deposit Amount ({user?.wallet?.currency === 'EUR' ? '€' : '$'})</label>
                         <input className="form-input" type="number" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} required placeholder="100.00" />
                       </div>
                       <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
@@ -573,7 +597,7 @@ export default function Dashboard() {
                       {depositRequests.map(req => (
                         <tr key={req.id}>
                           <td style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(req.createdAt).toLocaleString()}</td>
-                          <td style={{ fontWeight: "600" }}>${req.amount.toFixed(2)}</td>
+                          <td style={{ fontWeight: "600" }}>{formatPrice(req.amount, user?.wallet?.currency || "USD")}</td>
                           <td>
                             <span className={`badge ${
                               req.status === "APPROVED" ? "badge-green" :
@@ -605,7 +629,7 @@ export default function Dashboard() {
                           <td style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(log.createdAt).toLocaleString()}</td>
                           <td><span className={`badge ${log.type === "DEPOSIT" || log.type === "REFUND" ? "badge-green" : "badge-red"}`}>{log.type}</span></td>
                           <td style={{ fontWeight: "600", color: log.amount > 0 ? "var(--green)" : "var(--red)" }}>
-                            {log.amount > 0 ? `+$${log.amount.toFixed(2)}` : `-$${Math.abs(log.amount).toFixed(2)}`}
+                            {log.amount > 0 ? `+${formatPrice(log.amount, user?.wallet?.currency || "USD")}` : `-${formatPrice(Math.abs(log.amount), user?.wallet?.currency || "USD")}`}
                           </td>
                           <td style={{ color: "var(--text-secondary)" }}>{log.description}</td>
                         </tr>
@@ -735,7 +759,7 @@ export default function Dashboard() {
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <span style={{ fontWeight: "600" }}>${order.amountPaid.toFixed(2)}</span>
+                          <span style={{ fontWeight: "600" }}>{formatPrice(order.amountPaid, user?.wallet?.currency || "USD")}</span>
                           {order.paymentMethod === "DIRECT_CRYPTO" ? (
                             <span className="badge badge-purple" style={{ fontSize: "10px" }}>Paid via {order.cryptoCurrency}</span>
                           ) : (
@@ -827,19 +851,28 @@ export default function Dashboard() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                     <div style={{
-                      width: "64px", height: "64px", borderRadius: "50%",
+                      width: "80px", height: "80px", borderRadius: "50%",
                       background: "linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%)",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "#fff", fontWeight: "800", fontSize: "22px",
+                      color: "#fff", fontWeight: "800", fontSize: "24px",
                       boxShadow: "0 4px 12px rgba(0,113,227,0.3)",
+                      overflow: "hidden"
                     }}>
-                      {user.username.slice(0, 2).toUpperCase()}
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        user.username.slice(0, 2).toUpperCase()
+                      )}
                     </div>
                     <div>
                       <h3 style={{ marginBottom: "4px" }}>{user.username}</h3>
-                      <p style={{ fontSize: "13px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <p style={{ fontSize: "13px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                         📅 Registration date: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}
                       </p>
+                      <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer", display: "inline-block" }}>
+                        Upload Photo
+                        <input type="file" accept="image/png, image/jpeg, image/webp" onChange={handleAvatarUpload} style={{ display: "none" }} />
+                      </label>
                     </div>
                   </div>
                 </div>

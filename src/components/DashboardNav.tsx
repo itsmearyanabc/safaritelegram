@@ -27,17 +27,38 @@ export default function DashboardNav({
 }: DashboardNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [currencyOpen, setCurrencyOpen] = useState(false);
+  const currencyRef = useRef<HTMLDivElement>(null);
 
-  // Close menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
       }
+      if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
+        setCurrencyOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleCurrencyChange = async (currency: string) => {
+    setCurrencyOpen(false);
+    try {
+      const res = await fetch("/api/wallet/change-currency", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currency })
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error("Currency change failed", e);
+    }
+  };
 
   const handleTabClick = (tab: Tab) => {
     setActiveTab(tab);
@@ -77,15 +98,29 @@ export default function DashboardNav({
           <span style={{ fontSize: "16px" }}>🤖</span> Bot
         </a>
 
-        <button
-          type="button"
-          onClick={() => handleTabClick("wallet")}
-          className="btn btn-ghost btn-sm"
-          style={{ fontWeight: "700", padding: "6px 12px", fontSize: "16px" }}
-          title={`Wallet balance $${balance.toFixed(2)}`}
-        >
-          $
-        </button>
+        <div className={styles.menuWrap} ref={currencyRef}>
+          <button
+            type="button"
+            onClick={() => setCurrencyOpen(!currencyOpen)}
+            className="btn btn-ghost btn-sm"
+            style={{ fontWeight: "700", padding: "6px 12px", fontSize: "16px" }}
+            title={`Wallet balance ${formatPrice(balance, user?.wallet?.currency || "USD")}`}
+          >
+            {user?.wallet?.currency === "EUR" ? "€" : "$"}
+          </button>
+          
+          <nav
+            className={`${styles.menuPanel} ${currencyOpen ? styles.menuPanelOpen : ""}`}
+            style={{ right: 0, top: "calc(100% + 12px)", minWidth: "120px", padding: "8px 0" }}
+          >
+            <button type="button" onClick={() => handleCurrencyChange("USD")} className={styles.menuItem}>
+              <span style={{ width: "20px", fontWeight: "bold" }}>$</span> USD
+            </button>
+            <button type="button" onClick={() => handleCurrencyChange("EUR")} className={styles.menuItem}>
+              <span style={{ width: "20px", fontWeight: "bold" }}>€</span> EUR
+            </button>
+          </nav>
+        </div>
 
         <button
           type="button"
@@ -112,12 +147,17 @@ export default function DashboardNav({
               display: "flex", alignItems: "center", justifyContent: "center",
               cursor: "pointer",
               padding: 0,
-              marginLeft: "8px"
+              marginLeft: "8px",
+              overflow: "hidden"
             }}
             aria-label="Open profile menu"
             aria-expanded={menuOpen}
           >
-            {username.slice(0, 2).toUpperCase()}
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              username.slice(0, 2).toUpperCase()
+            )}
           </button>
 
           {/* New Dropdown Layout */}
@@ -127,7 +167,7 @@ export default function DashboardNav({
           >
             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", marginBottom: "8px" }}>
               <strong style={{ display: "block", fontSize: "15px", marginBottom: "2px" }}>{username}</strong>
-              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Balance: {formatPrice(balance, "USD")}</span>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Balance: {formatPrice(balance, user?.wallet?.currency || "USD")}</span>
             </div>
 
             <button type="button" onClick={() => handleTabClick("profile")} className={styles.menuItem}>
