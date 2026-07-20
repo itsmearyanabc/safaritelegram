@@ -33,9 +33,8 @@ export async function POST(req: Request) {
       if (!wallet || wallet.balance < product.price) {
         throw new Error("Insufficient wallet balance. Please deposit funds.");
       }
-      if (wallet.currency !== product.currency) {
-        throw new Error(`This product is priced in ${product.currency}, but your wallet is in ${wallet.currency}. Currency conversion is not available.`);
-      }
+      // Removed currency mismatch check. Both wallet.balance and product.price are stored in USD.
+      // wallet.currency is purely a display preference for the frontend.
 
       // 2. Fetch oldest unallocated item for the product (FIFO)
       const item = await tx.inventoryItem.findFirst({
