@@ -232,7 +232,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                                 className="btn btn-primary btn-sm" 
                                 style={{ minWidth: "80px" }}
                               >
-                                {v.price}$
+                                {formatPrice(v.price, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}
                               </button>
                             </td>
                           </tr>

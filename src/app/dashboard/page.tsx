@@ -240,7 +240,7 @@ export default function Dashboard() {
       if (!r.ok) { setWalletMessage(`Error: ${d.error}`); return; }
       setPendingDeposit(d.depositRequest);
       setShowDepositInstructions(true);
-      setWalletMessage(`Deposit request for $${parseFloat(depositAmount).toFixed(2)} submitted successfully!`);
+      setWalletMessage(`Deposit request for ${formatPrice(parseFloat(depositAmount), user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)} submitted successfully!`);
       setDepositAmount("");
       loadDepositRequests();
     } catch { setWalletMessage("Error processing deposit"); }
@@ -457,7 +457,7 @@ export default function Dashboard() {
                             )}
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "14px", marginTop: "14px" }}>
-                            <span style={{ fontSize: "20px", fontWeight: "700" }}>{formatPrice(product.price, user?.wallet?.currency || "USD")}</span>
+                            <span style={{ fontSize: "20px", fontWeight: "700" }}>{formatPrice(product.price, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</span>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
                               <Link
                                 href={`/dashboard/product/${product.id}`}
@@ -520,17 +520,17 @@ export default function Dashboard() {
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                             <div>
                               <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Order Amount</p>
-                              <p style={{ fontWeight: "600", color: "var(--green)" }}>{formatPrice(cryptoPaymentInfo.amountPaid, user?.wallet?.currency || "USD")}</p>
+                              <p style={{ fontWeight: "600", color: "var(--green)" }}>{formatPrice(cryptoPaymentInfo.amountPaid, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</p>
                             </div>
                             <div>
                               <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Network Fee (est.)</p>
-                              <p style={{ fontWeight: "600", color: "var(--orange)" }}>{formatPrice(cryptoPaymentInfo.networkFee, user?.wallet?.currency || "USD")}</p>
+                              <p style={{ fontWeight: "600", color: "var(--orange)" }}>{formatPrice(cryptoPaymentInfo.networkFee, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</p>
                             </div>
                           </div>
 
                           <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                             <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "2px" }}>Total Payable ({cryptoPaymentInfo.cryptoName})</p>
-                            <p style={{ fontWeight: "800", fontSize: "20px", color: "var(--accent)" }}>{formatPrice(cryptoPaymentInfo.totalDue, user?.wallet?.currency || "USD")} <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "400" }}>in {cryptoPaymentInfo.cryptoName}</span></p>
+                            <p style={{ fontWeight: "800", fontSize: "20px", color: "var(--accent)" }}>{formatPrice(cryptoPaymentInfo.totalDue, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)} <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "400" }}>in {cryptoPaymentInfo.cryptoName}</span></p>
                           </div>
                         </div>
 
@@ -573,7 +573,7 @@ export default function Dashboard() {
                   <div className="card" style={{ border: "1px solid var(--accent)", background: "rgba(0, 113, 227, 0.05)" }}>
                     <h3 style={{ marginBottom: "12px", color: "var(--accent)" }}>💵 Send Crypto Payment</h3>
                     <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "16px" }}>
-                      Your deposit of <strong>${Number(pendingDeposit.amount).toFixed(2)}</strong> is currently <strong>PENDING verification</strong>. Please transfer the amount to the address below:
+                      Your deposit of <strong>{formatPrice(pendingDeposit.amount, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</strong> is currently <strong>PENDING verification</strong>. Please transfer the amount to the address below:
                     </p>
                     
                     <div style={{ marginBottom: "16px" }}>
@@ -598,7 +598,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="card">
                     <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>Available Balance</p>
-                    <h1 style={{ color: "var(--green)", marginBottom: "24px" }}>{formatPrice(user.wallet.balance, user.wallet.currency || "USD")}</h1>
+                    <h1 style={{ color: "var(--green)", marginBottom: "24px" }}>{formatPrice(user.wallet.balance, user.wallet.currency || "USD", user?.wallet?.exchangeRate || 1)}</h1>
 
                     {walletMessage && (
                       <div className={walletMessage.startsWith("Error") ? "alert alert-error" : "alert alert-success"}>
@@ -651,7 +651,7 @@ export default function Dashboard() {
                       {depositRequests.map(req => (
                         <tr key={req.id}>
                           <td style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(req.createdAt).toLocaleString()}</td>
-                          <td style={{ fontWeight: "600" }}>{formatPrice(req.amount, user?.wallet?.currency || "USD")}</td>
+                          <td style={{ fontWeight: "600" }}>{formatPrice(req.amount, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</td>
                           <td>
                             <span className={`badge ${
                               req.status === "APPROVED" ? "badge-green" :
@@ -683,7 +683,7 @@ export default function Dashboard() {
                           <td style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(log.createdAt).toLocaleString()}</td>
                           <td><span className={`badge ${log.type === "DEPOSIT" || log.type === "REFUND" ? "badge-green" : "badge-red"}`}>{log.type}</span></td>
                           <td style={{ fontWeight: "600", color: log.amount > 0 ? "var(--green)" : "var(--red)" }}>
-                            {log.amount > 0 ? `+${formatPrice(log.amount, user?.wallet?.currency || "USD")}` : `-${formatPrice(Math.abs(log.amount), user?.wallet?.currency || "USD")}`}
+                            {log.amount > 0 ? `+${formatPrice(log.amount, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}` : `-${formatPrice(Math.abs(log.amount), user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}`}
                           </td>
                           <td style={{ color: "var(--text-secondary)" }}>{log.description}</td>
                         </tr>
@@ -826,7 +826,7 @@ export default function Dashboard() {
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <span style={{ fontWeight: "600" }}>{formatPrice(order.amountPaid, user?.wallet?.currency || "USD")}</span>
+                          <span style={{ fontWeight: "600" }}>{formatPrice(order.amountPaid, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</span>
                           {order.paymentMethod === "DIRECT_CRYPTO" ? (
                             <span className="badge badge-purple" style={{ fontSize: "10px" }}>Paid via {order.cryptoCurrency}</span>
                           ) : (
@@ -877,7 +877,7 @@ export default function Dashboard() {
                         <option value="">Choose an order...</option>
                         {orders.map(o => (
                           <option key={o.id} value={o.id}>
-                            Order #{o.id.slice(0,8)} - {o.product.name} ({formatPrice(o.amountPaid, user?.wallet?.currency || "USD")})
+                            Order #{o.id.slice(0,8)} - {o.product.name} ({formatPrice(o.amountPaid, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)})
                           </option>
                         ))}
                       </select>
@@ -1035,12 +1035,12 @@ export default function Dashboard() {
                 </div>
                 <div className="card stat-card" style={{ borderTop: "3px solid var(--green)" }}>
                   <p style={{ fontSize: "24px", marginBottom: "4px" }}>📈</p>
-                  <p className="stat-value" style={{ color: "var(--green)" }}>${Number(user.totalSpent || 0).toFixed(2)}</p>
+                  <p className="stat-value" style={{ color: "var(--green)" }}>{formatPrice(user.totalSpent || 0, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</p>
                   <p className="stat-label">Total Spent</p>
                 </div>
                 <div className="card stat-card" style={{ borderTop: "3px solid var(--purple)" }}>
                   <p style={{ fontSize: "24px", marginBottom: "4px" }}>💰</p>
-                  <p className="stat-value" style={{ color: "var(--purple)" }}>${Number(user.wallet?.balance || 0).toFixed(2)}</p>
+                  <p className="stat-value" style={{ color: "var(--purple)" }}>{formatPrice(user.wallet?.balance || 0, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</p>
                   <p className="stat-label">Current Balance</p>
                 </div>
               </div>

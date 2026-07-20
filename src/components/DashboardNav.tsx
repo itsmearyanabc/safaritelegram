@@ -104,7 +104,7 @@ export default function DashboardNav({
             onClick={() => setCurrencyOpen(!currencyOpen)}
             className="btn btn-ghost btn-sm"
             style={{ fontWeight: "700", padding: "6px 12px", fontSize: "16px" }}
-            title={`Wallet balance ${formatPrice(balance, user?.wallet?.currency || "USD")}`}
+            title={`Wallet balance ${formatPrice(balance, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}`}
           >
             {user?.wallet?.currency === "EUR" ? "€" : "$"}
           </button>
@@ -167,7 +167,7 @@ export default function DashboardNav({
           >
             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", marginBottom: "8px" }}>
               <strong style={{ display: "block", fontSize: "15px", marginBottom: "2px" }}>{username}</strong>
-              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Balance: {formatPrice(balance, user?.wallet?.currency || "USD")}</span>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Balance: {formatPrice(balance, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</span>
             </div>
 
             <button type="button" onClick={() => handleTabClick("profile")} className={styles.menuItem}>

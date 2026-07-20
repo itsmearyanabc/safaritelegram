@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+import { getCurrencyMultiplier } from "@/lib/exchangeRates";
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -28,6 +30,8 @@ export async function GET() {
 
     const completedOrders = user.orders.filter(o => ["PAID", "READY", "COMPLETED"].includes(o.status));
     const totalSpent = completedOrders.reduce((sum, o) => sum + Number(o.amountPaid), 0);
+    const currency = user.wallet?.currency || "USD";
+    const exchangeRate = await getCurrencyMultiplier(currency);
 
     return NextResponse.json({
       user: {
@@ -42,7 +46,8 @@ export async function GET() {
         totalSpent,
         wallet: {
           balance: user.wallet?.balance || 0.0,
-          currency: user.wallet?.currency || "USD",
+          currency,
+          exchangeRate,
         },
       },
     });
