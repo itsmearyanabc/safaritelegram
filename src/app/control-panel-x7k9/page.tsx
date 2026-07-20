@@ -285,6 +285,23 @@ export default function ClientAdminPanel() {
     } catch (e) { setMsg({ type: "error", text: "Error deleting product" }); }
   };
 
+  const handleUpdateOrderItemStatus = async (orderItemId: string, status: string) => {
+    try {
+      const res = await fetch("/api/client-admin/orders/update-status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderItemId, status })
+      });
+      if (res.ok) {
+        setMsg({ type: "success", text: "Status updated successfully!" });
+        fetchAll();
+      } else {
+        const d = await res.json(); setMsg({ type: "error", text: d.error });
+      }
+    } catch (e) {
+      setMsg({ type: "error", text: "Error updating status" });
+    }
+  };
+
   const handleAddInventory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -358,6 +375,32 @@ export default function ClientAdminPanel() {
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/admin/upload-image", { method: "POST", body: formData });
+      const data = await res.json();
+      
+      if (res.ok) {
+        if (isEdit) {
+          setEditProductData({ ...editProductData, imageUrl: data.url });
+        } else {
+          setNewProduct({ ...newProduct, imageUrl: data.url });
+        }
+        setMsg({ type: "success", text: "Image uploaded successfully!" });
+      } else {
+        setMsg({ type: "error", text: data.error || "Upload failed" });
+      }
+    } catch (err) {
+      setMsg({ type: "error", text: "Failed to upload image" });
+    }
   };
 
   if (loading || !user) {
@@ -550,8 +593,12 @@ export default function ClientAdminPanel() {
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <input className="form-input" placeholder="CAS Number (Optional)" value={newProduct.casNumber} onChange={e => setNewProduct({...newProduct, casNumber: e.target.value})} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <input className="form-input" placeholder="Image URL (Optional)" value={newProduct.imageUrl} onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} />
+                  <div className="form-group" style={{ marginBottom: 0, display: "flex", gap: "8px", alignItems: "center" }}>
+                    <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer", margin: 0, flex: 1, textAlign: "center" }}>
+                      Upload Image
+                      <input type="file" accept="image/*" onChange={(e) => handleProductImageUpload(e, false)} style={{ display: "none" }} />
+                    </label>
+                    {newProduct.imageUrl && <span style={{ fontSize: "12px", color: "var(--green)" }}>✓ Uploaded</span>}
                   </div>
                   <div className="form-group" style={{ gridColumn: "span 2", marginBottom: 0 }}>
                     <textarea className="form-input" placeholder="Description" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} rows={3}></textarea>
@@ -613,7 +660,18 @@ export default function ClientAdminPanel() {
                                   </select>
                                   <input className="form-input" placeholder="Price" type="number" step="0.01" value={editProductData.price} onChange={e => setEditProductData({...editProductData, price: e.target.value})} />
                                 </div>
-                                <textarea className="form-input" placeholder="Description" rows={2} style={{ gridColumn: "span 2" }} value={editProductData.description} onChange={e => setEditProductData({...editProductData, description: e.target.value})} />
+                                <div style={{ gridColumn: "span 2", display: "flex", gap: "16px" }}>
+                                  <textarea className="form-input" placeholder="Description" rows={3} style={{ flex: 1 }} value={editProductData.description} onChange={e => setEditProductData({...editProductData, description: e.target.value})} />
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "200px" }}>
+                                    <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer", textAlign: "center" }}>
+                                      Update Image
+                                      <input type="file" accept="image/*" onChange={(e) => handleProductImageUpload(e, true)} style={{ display: "none" }} />
+                                    </label>
+                                    {editProductData.imageUrl && (
+                                      <img src={editProductData.imageUrl} alt="Preview" style={{ width: "100%", height: "60px", objectFit: "cover", borderRadius: "var(--radius-sm)" }} />
+                                    )}
+                                  </div>
+                                </div>
                                 <div style={{ gridColumn: "span 2", display: "flex", gap: "12px", justifyContent: "flex-end" }}>
                                   <button onClick={() => setEditingProductId(null)} className="btn btn-ghost btn-sm">Cancel</button>
                                   <button onClick={handleEditProductSubmit} className="btn btn-primary btn-sm">Save Changes</button>
@@ -724,7 +782,23 @@ export default function ClientAdminPanel() {
                                   <div key={item.id} style={{ background: "var(--bg-secondary)", padding: "16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                                       <strong>{item.product.name}</strong>
-                                      <span className={`badge ${item.status === "READY" ? "badge-blue" : item.status === "COOLDOWN_ACTIVE" ? "badge-orange" : "badge-in_stock"}`}>{item.status}</span>
+                                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                        <select 
+                                          className="form-input" 
+                                          style={{ padding: "4px 8px", fontSize: "12px", width: "auto" }}
+                                          value={item.status}
+                                          onChange={(e) => handleUpdateOrderItemStatus(item.id, e.target.value)}
+                                        >
+                                          <option value="PENDING_PAYMENT">Pending</option>
+                                          <option value="PAID">Paid</option>
+                                          <option value="PROCESSING">Processing</option>
+                                          <option value="COOLDOWN_ACTIVE">Cooldown</option>
+                                          <option value="READY">Reached / Ready</option>
+                                          <option value="COMPLETED">Completed</option>
+                                          <option value="REFUNDED">Refunded</option>
+                                          <option value="FAILED">Failed</option>
+                                        </select>
+                                      </div>
                                     </div>
                                     
                                     <textarea 
