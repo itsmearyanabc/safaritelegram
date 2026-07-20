@@ -84,7 +84,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { productId, name, description, price, formula, casNumber, imageUrl, currency, stockState } = await req.json();
+  const { productId, name, description, price, formula, casNumber, imageUrl, currency, stockState, availableStock } = await req.json();
 
   if (!productId) {
     return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
@@ -117,9 +117,40 @@ export async function PUT(req: NextRequest) {
   if (imageUrl !== undefined) updateData.imageUrl = imageUrl?.trim() || null;
   if (stockState !== undefined) updateData.stockState = stockState;
 
-  const updatedProduct = await prisma.product.update({
-    where: { id: productId },
-    data: updateData,
+  const targetStock = availableStock !== undefined ? parseInt(availableStock, 10) : undefined;
+
+  const updatedProduct = await prisma.$transaction(async (tx) => {
+    const updated = await tx.product.update({
+      where: { id: productId },
+      data: updateData,
+    });
+
+    if (targetStock !== undefined && !isNaN(targetStock) && targetStock >= 0) {
+      const currentUnallocated = await tx.inventoryItem.findMany({
+        where: { productId, isAllocated: false },
+        orderBy: { createdAt: "asc" }
+      });
+
+      const currentCount = currentUnallocated.length;
+
+      if (targetStock > currentCount) {
+        const diff = targetStock - currentCount;
+        const newItems = Array.from({ length: diff }).map(() => ({
+          productId,
+          data: "Generic Stock (Admin)",
+          isAllocated: false,
+        }));
+        await tx.inventoryItem.createMany({ data: newItems });
+      } else if (targetStock < currentCount) {
+        const diff = currentCount - targetStock;
+        const itemsToDelete = currentUnallocated.slice(0, diff).map(i => i.id);
+        await tx.inventoryItem.deleteMany({
+          where: { id: { in: itemsToDelete } }
+        });
+      }
+    }
+
+    return updated;
   });
 
   return NextResponse.json({ product: updatedProduct });

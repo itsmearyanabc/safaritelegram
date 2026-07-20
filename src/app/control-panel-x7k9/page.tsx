@@ -38,7 +38,7 @@ export default function ClientAdminPanel() {
   const [newInventory, setNewInventory] = useState({ productId: "", data: "", locationData: "" });
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [editProductData, setEditProductData] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", imageUrl: "", stockState: "OUT_OF_STOCK" });
+  const [editProductData, setEditProductData] = useState({ name: "", description: "", price: "", currency: "USD", formula: "", casNumber: "", imageUrl: "", stockState: "OUT_OF_STOCK", availableStock: "0" });
   const [disputeMessageTexts, setDisputeMessageTexts] = useState<Record<string, string>>({});
 
   const [cryptoSettings, setCryptoSettings] = useState({
@@ -252,7 +252,8 @@ export default function ClientAdminPanel() {
       formula: p.formula || "",
       casNumber: p.casNumber || "",
       imageUrl: p.imageUrl || "",
-      stockState: p.stockState || "OUT_OF_STOCK"
+      stockState: p.stockState || "OUT_OF_STOCK",
+      availableStock: (p.availableItems || 0).toString()
     });
   };
 
@@ -261,7 +262,7 @@ export default function ClientAdminPanel() {
     try {
       const res = await fetch("/api/admin/products", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editProductData, productId: editingProductId, price: parseFloat(editProductData.price) })
+        body: JSON.stringify({ ...editProductData, productId: editingProductId, price: parseFloat(editProductData.price), availableStock: parseInt(editProductData.availableStock) })
       });
       if (res.ok) {
         setMsg({ type: "success", text: "Product updated!" });
@@ -602,6 +603,7 @@ export default function ClientAdminPanel() {
                                     <option value="CRITICAL_STOCK">CRITICAL_STOCK</option>
                                     <option value="OUT_OF_STOCK">OUT_OF_STOCK</option>
                                   </select>
+                                  <input className="form-input" style={{ width: "80px" }} type="number" min="0" placeholder="Qty" value={editProductData.availableStock} onChange={e => setEditProductData({...editProductData, availableStock: e.target.value})} title="Available Quantity" />
                                   <select className="form-input" style={{ width: "80px" }} value={editProductData.currency} onChange={e => setEditProductData({...editProductData, currency: e.target.value})}>
                                     <option value="USD">USD</option>
                                     <option value="EUR">EUR</option>
