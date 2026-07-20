@@ -103,10 +103,10 @@ export default function DashboardNav({
             type="button"
             onClick={() => setCurrencyOpen(!currencyOpen)}
             className="btn btn-ghost btn-sm"
-            style={{ fontWeight: "700", padding: "6px 12px", fontSize: "16px" }}
-            title={`Wallet balance ${formatPrice(balance, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}`}
+            style={{ fontWeight: "700", padding: "6px 12px", fontSize: "15px", display: "flex", gap: "6px", alignItems: "center" }}
+            title="Change Currency"
           >
-            {user?.wallet?.currency === "EUR" ? "€" : "$"}
+            {formatPrice(balance, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}
           </button>
           
           <nav

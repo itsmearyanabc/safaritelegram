@@ -21,12 +21,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const [activeTab, setActiveTab] = useState<any>("shop"); // Mock active tab for nav
   const [isFavorite, setIsFavorite] = useState(false);
 
-  // Mock variants for the UI
-  const mockVariants = [
-    { id: "v1", type: "Cache", quantity: "2g", price: 70, location: "İzmir / Karşıyaka" },
-    { id: "v2", type: "Stone", quantity: "2g", price: 70, location: "İzmir / Karşıyaka" },
-    { id: "v3", type: "Burial", quantity: "10g", price: 250, location: "Istanbul / Kadıköy" },
-  ];
+  // Mock variants removed as per user request to use real data
 
   useEffect(() => {
     (async () => {
@@ -187,58 +182,27 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                     {product.description || "No description provided."}
                   </p>
 
-                  {/* Filters (Mocked for UI) */}
-                  <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
-                    <select className="form-input" style={{ padding: "8px 12px" }}>
-                      <option>Any City</option>
-                      <option>Izmir</option>
-                      <option>Istanbul</option>
-                    </select>
-                    <select className="form-input" style={{ padding: "8px 12px" }}>
-                      <option>Any Area</option>
-                    </select>
-                    <select className="form-input" style={{ padding: "8px 12px" }}>
-                      <option>All Cache Types</option>
-                    </select>
-                  </div>
-
-                  {/* Variants List */}
-                  <div className="card" style={{ padding: "0" }}>
-                    <table style={{ width: "100%" }}>
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Type</th>
-                          <th>Quantity</th>
-                          <th style={{ textAlign: "right" }}>Price</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockVariants.map(v => (
-                          <tr key={v.id}>
-                            <td>
-                              <div style={{ fontWeight: "600", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ color: "var(--accent)" }}>⭐ 🍀</span> {product.name}
-                              </div>
-                              <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-                                📍 {v.location}
-                              </div>
-                            </td>
-                            <td style={{ color: "var(--text-secondary)" }}>{v.type}</td>
-                            <td style={{ fontWeight: "500" }}>{v.quantity}</td>
-                            <td style={{ textAlign: "right" }}>
-                              <button 
-                                onClick={() => handleBuy(v.price)}
-                                className="btn btn-primary btn-sm" 
-                                style={{ minWidth: "80px" }}
-                              >
-                                {formatPrice(v.price, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  {/* Purchase Action */}
+                  <div className="card" style={{ padding: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "3px solid var(--accent)" }}>
+                    <div>
+                      <h3 style={{ marginBottom: "4px" }}>Purchase {product.name}</h3>
+                      <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                        {product.stockCount > 0 ? `${product.stockCount} unit(s) available in stock` : "Currently out of stock"}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                      <span style={{ fontSize: "24px", fontWeight: "800", color: "var(--text-primary)" }}>
+                        {formatPrice(product.price, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}
+                      </span>
+                      <button 
+                        onClick={() => handleBuy(product.price)}
+                        className="btn btn-primary" 
+                        disabled={product.stockCount < 1}
+                        style={{ padding: "12px 24px", fontSize: "16px" }}
+                      >
+                        {product.stockCount > 0 ? "Buy Now" : "Out of Stock"}
+                      </button>
+                    </div>
                   </div>
 
                 </div>

@@ -30,7 +30,7 @@ export async function POST(req: Request) {
         where: { userId: session.userId },
       });
 
-      if (!wallet || wallet.balance < product.price) {
+      if (!wallet || Number(wallet.balance) < Number(product.price)) {
         throw new Error("Insufficient wallet balance. Please deposit funds.");
       }
       // Removed currency mismatch check. Both wallet.balance and product.price are stored in USD.
