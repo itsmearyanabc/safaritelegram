@@ -13,7 +13,7 @@ export async function GET() {
       include: {
         wallet: true,
         orders: {
-          select: { amountPaid: true, status: true }
+          select: { totalAmount: true, status: true }
         }
       },
       orderBy: { createdAt: "desc" },
@@ -21,7 +21,7 @@ export async function GET() {
 
     const enrichedUsers = users.map(u => {
       const completedOrders = u.orders.filter(o => ["PAID", "READY", "COMPLETED"].includes(o.status));
-      const totalSpent = completedOrders.reduce((sum, o) => sum + Number(o.amountPaid), 0);
+      const totalSpent = completedOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
       return {
         id: u.id,

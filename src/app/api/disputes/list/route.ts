@@ -17,8 +17,12 @@ export async function GET() {
           user: { select: { username: true, telegramUsername: true } },
           order: {
             include: {
-              product: true,
-              inventoryItem: true,
+              items: {
+                include: {
+                  product: true,
+                  inventoryItem: true,
+                }
+              },
             },
           },
           messages: { orderBy: { createdAt: "asc" } },
@@ -31,7 +35,11 @@ export async function GET() {
         include: {
           order: {
             include: {
-              product: true,
+              items: {
+                include: {
+                  product: true,
+                }
+              },
             },
           },
           messages: { orderBy: { createdAt: "asc" } },

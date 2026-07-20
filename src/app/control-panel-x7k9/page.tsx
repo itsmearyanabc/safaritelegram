@@ -107,18 +107,18 @@ export default function ClientAdminPanel() {
     })();
   }, []);
 
-  const handleSendMessage = async (orderId: string, fallbackMessage?: string) => {
-    const message = (adminMessages[orderId] ?? fallbackMessage ?? "").trim();
+  const handleSendMessage = async (orderItemId: string, fallbackMessage?: string) => {
+    const message = (adminMessages[orderItemId] ?? fallbackMessage ?? "").trim();
     if (!message) return;
 
-    const fileData = adminFiles[orderId];
+    const fileData = adminFiles[orderItemId];
 
     setMsg(null);
     try {
       const res = await fetch("/api/client-admin/orders/send-message", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderId,
+          orderItemId,
           message,
           file: fileData ? fileData.base64 : undefined,
           fileName: fileData ? fileData.name : undefined,
@@ -129,20 +129,16 @@ export default function ClientAdminPanel() {
       if (!res.ok) { setMsg({ type: "error", text: data.error }); return; }
 
       if (data.telegramSent) {
-        setMsg({ type: "success", text: "Message saved and delivered to Telegram!" });
-      } else if (data.telegramError) {
-        setMsg({
-          type: "error",
-          text: `Message saved in DB, but Telegram failed: ${data.telegramError}`,
-        });
+        setMsg({ type: "success", text: "Coordinates saved and delivered to user's Telegram!" });
       } else {
-        setMsg({ type: "success", text: "Message saved and order updated!" });
+        const warningSuffix = data.telegramError ? ` (Telegram skipped: ${data.telegramError})` : "";
+        setMsg({ type: "success", text: `Coordinates saved and updated on user's dashboard!${warningSuffix}` });
       }
       fetchAll();
-      setAdminMessages(prev => ({ ...prev, [orderId]: "" }));
+      setAdminMessages(prev => ({ ...prev, [orderItemId]: "" }));
       setAdminFiles(prev => {
         const next = { ...prev };
-        delete next[orderId];
+        delete next[orderItemId];
         return next;
       });
     } catch (e) {
@@ -668,7 +664,7 @@ export default function ClientAdminPanel() {
                               <span className="badge badge-green">💳 Wallet</span>
                             )}
                           </div>
-                          <span style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>Ordered {order.product.name} • ${Number(order.amountPaid).toFixed(2)} • {new Date(order.createdAt).toLocaleString()}</span>
+                          <span style={{ color: "var(--text-tertiary)", fontSize: "13px" }}>Ordered {order.items.map((i: any) => `${i.product.name}`).join(", ")} • ${Number(order.totalAmount).toFixed(2)} • {new Date(order.createdAt).toLocaleString()}</span>
                         </div>
                         <div>
                           <span style={{ fontSize: "20px", color: "var(--text-tertiary)", transform: expandedOrderId === order.id ? "rotate(180deg)" : "rotate(0deg)", display: "inline-block", transition: "transform 0.2s ease" }}>↓</span>
@@ -719,40 +715,47 @@ export default function ClientAdminPanel() {
                                 </p>
                               )}
                             </div>
-                            <div>
-                              <h4 style={{ marginBottom: "12px", color: "var(--text-secondary)", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Send Coordinates</h4>
-                              <textarea 
-                                className="form-input" 
-                                rows={4} 
-                                placeholder="Enter locker code, GPS coordinates, or pickup instructions..."
-                                value={adminMessages[order.id] !== undefined ? adminMessages[order.id] : (order.adminMessage || "")}
-                                onChange={(e) => setAdminMessages(prev => ({ ...prev, [order.id]: e.target.value }))}
-                                style={{ marginBottom: "12px" }}
-                              />
-                              <div style={{ marginBottom: "12px" }}>
-                                <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-                                  📎 Attach File (Photo/Video/PDF)
-                                  <input 
-                                    type="file" 
-                                    onChange={(e) => handleFileChange(order.id, e)} 
-                                    style={{ display: "none" }} 
-                                  />
-                                </label>
-                                {adminFiles[order.id] && (
-                                  <span style={{ marginLeft: "8px", fontSize: "12px", color: "var(--green)" }}>
-                                    ✓ {adminFiles[order.id].name}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-                                  {order.orderSource === "TELEGRAM" && order.user.telegramId 
-                                    ? "Will be sent directly to their Telegram" 
-                                    : "Will appear on their website dashboard"}
-                                </span>
-                                <button onClick={() => handleSendMessage(order.id, order.adminMessage || undefined)} className="btn btn-primary" disabled={!(adminMessages[order.id] ?? order.adminMessage)?.trim()}>
-                                  Send Coordinates
-                                </button>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ marginBottom: "12px", color: "var(--text-secondary)", fontSize: "13px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Deliver Items</h4>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                                {order.items.map((item: any) => (
+                                  <div key={item.id} style={{ background: "var(--bg-secondary)", padding: "16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                      <strong>{item.product.name}</strong>
+                                      <span className={`badge ${item.status === "READY" ? "badge-blue" : item.status === "COOLDOWN_ACTIVE" ? "badge-orange" : "badge-in_stock"}`}>{item.status}</span>
+                                    </div>
+                                    
+                                    <textarea 
+                                      className="form-input" 
+                                      rows={3} 
+                                      placeholder="GPS coordinates, locker code, bench pickup instructions..."
+                                      value={adminMessages[item.id] !== undefined ? adminMessages[item.id] : (item.adminMessage || "")}
+                                      onChange={(e) => setAdminMessages(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                      style={{ marginBottom: "12px" }}
+                                    />
+                                    
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                                          📎 File
+                                          <input 
+                                            type="file" 
+                                            onChange={(e) => handleFileChange(item.id, e)} 
+                                            style={{ display: "none" }} 
+                                          />
+                                        </label>
+                                        {adminFiles[item.id] && (
+                                          <span style={{ fontSize: "12px", color: "var(--green)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            ✓ {adminFiles[item.id].name}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <button onClick={() => handleSendMessage(item.id, item.adminMessage || undefined)} className="btn btn-primary btn-sm" disabled={!(adminMessages[item.id] ?? item.adminMessage)?.trim()}>
+                                        Send Coordinates
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -787,8 +790,8 @@ export default function ClientAdminPanel() {
                       <tr key={o.id}>
                         <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--text-tertiary)" }}>{o.id.slice(0, 8)}</td>
                         <td style={{ fontWeight: "500" }}>{o.user.username}</td>
-                        <td>{o.product.name}</td>
-                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${Number(o.amountPaid).toFixed(2)}</td>
+                        <td>{o.items.map((i: any) => i.product.name).join(", ")}</td>
+                        <td style={{ fontWeight: "600", color: "var(--green)" }}>${Number(o.totalAmount).toFixed(2)}</td>
                         <td>
                           {o.paymentMethod === "DIRECT_CRYPTO" ? `Crypto (${o.cryptoCurrency || "N/A"})` : "Wallet"}
                         </td>
@@ -980,7 +983,7 @@ export default function ClientAdminPanel() {
                       <div key={d.id} style={{ padding: "20px", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--bg-primary)", display: "flex", flexDirection: "column", gap: "12px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontWeight: "600", fontSize: "15px" }}>
-                            👤 {d.user.username} <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>disputed Order #{d.order.id.slice(0,8)} ({d.order.product.name})</span>
+                            👤 {d.user.username} <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>disputed Order #{d.order.id.slice(0,8)} ({d.order.items.map((i: any) => i.product.name).join(", ")})</span>
                           </span>
                           <span className={`badge ${d.status === "RESOLVED" ? "badge-green" : "badge-orange"}`}>{d.status}</span>
                         </div>

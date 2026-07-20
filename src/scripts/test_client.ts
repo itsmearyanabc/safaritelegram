@@ -124,10 +124,18 @@ async function runAcceptanceTest() {
         const createdOrder = await tx.order.create({
           data: {
             userId: testUser.id,
-            productId: testProduct.id,
-            inventoryItemId: item.id,
-            amountPaid: Number(testProduct.price),
+            totalAmount: Number(testProduct.price),
             status: "READY", // Short-circuit cooldown for immediate test evaluation
+            items: {
+              create: [
+                {
+                  productId: testProduct.id,
+                  inventoryItemId: item.id,
+                  priceAtPurchase: Number(testProduct.price),
+                  status: "READY",
+                }
+              ]
+            }
           },
         });
 

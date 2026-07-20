@@ -17,7 +17,7 @@ export async function GET() {
         wallet: true,
         orders: {
           select: {
-            amountPaid: true,
+            totalAmount: true,
             status: true,
           },
         },
@@ -29,7 +29,7 @@ export async function GET() {
     }
 
     const completedOrders = user.orders.filter(o => ["PAID", "READY", "COMPLETED"].includes(o.status));
-    const totalSpent = completedOrders.reduce((sum, o) => sum + Number(o.amountPaid), 0);
+    const totalSpent = completedOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
     const currency = user.wallet?.currency || "USD";
     const exchangeRate = await getCurrencyMultiplier(currency);
 

@@ -19,12 +19,33 @@ interface Product {
 }
 interface Category { id: string; name: string; description: string | null; products: Product[]; }
 interface WalletLedger { id: string; type: string; amount: number; description: string; createdAt: string; }
-interface Order {
-  id: string; productId: string; amountPaid: number; status: string;
-  cooldownEndAt: string | null; createdAt: string;
-  paymentMethod?: string; cryptoCurrency?: string | null; coinbaseChargeUrl?: string | null;
+interface OrderItem {
+  id: string;
+  productId: string;
+  priceAtPurchase: number;
+  status: string;
+  cooldownEndAt: string | null;
   product: Product;
   inventoryItem: { id: string; mediaUrl: string | null; locationData: string | null; data: string } | null;
+  adminMessage: string | null;
+  adminMessageFileUrl: string | null;
+  adminMessageFileType: string | null;
+  adminMessageSentAt: string | null;
+}
+
+interface Order {
+  id: string;
+  totalAmount: number;
+  currency: string;
+  status: string;
+  orderSource: string;
+  paymentMethod: string;
+  cryptoCurrency: string | null;
+  cryptoAmountDue: string | null;
+  paymentWalletAddress: string | null;
+  coinbaseChargeUrl: string | null;
+  createdAt: string;
+  items: OrderItem[];
 }
 interface DisputeMessage {
   id: string;
@@ -717,44 +738,39 @@ export default function Dashboard() {
                 </div>
               ) : (
                 orders.map(order => {
-                  const isCooldown = order.status === "COOLDOWN_ACTIVE";
-                  const secondsLeft = order.cooldownEndAt ? Math.max(0, Math.ceil((new Date(order.cooldownEndAt).getTime() - Date.now()) / 1000)) : 0;
-
                   return (
                     <div key={order.id} className="card" style={{
                       borderLeft: `4px solid ${
-                        order.status === "READY" ? "var(--green)" :
-                        order.status === "COOLDOWN_ACTIVE" ? "var(--orange)" :
+                        order.status === "PAID" ? "var(--green)" :
                         order.status === "PENDING_PAYMENT" ? "var(--red)" :
                         order.status === "COMPLETED" ? "var(--accent)" : "var(--border)"
-                      }`
+                      }`,
+                      marginBottom: "24px"
                     }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
                         <div>
-                          <p style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "monospace" }}>#{order.id.slice(0, 8)}</p>
-                          <h4>{order.product.name}</h4>
+                          <p style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "monospace" }}>ORDER #{order.id.slice(0, 8)}</p>
+                          <span style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(order.createdAt).toLocaleString()}</span>
                         </div>
                         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                           <span className={`badge ${
-                            order.status === "READY" ? "badge-green" :
-                            order.status === "COOLDOWN_ACTIVE" ? "badge-orange" :
+                            order.status === "PAID" ? "badge-green" :
                             order.status === "PENDING_PAYMENT" ? "badge-red" :
                             order.status === "COMPLETED" ? "badge-blue" : ""
                           }`}>{order.status.replace(/_/g, " ")}</span>
-                          <span style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
 
                       {order.status === "PENDING_PAYMENT" && order.coinbaseChargeUrl && (
                         <div style={{
                           background: "var(--red-bg)", padding: "14px",
-                          borderRadius: "var(--radius-md)", marginBottom: "12px",
+                          borderRadius: "var(--radius-md)", marginBottom: "16px",
                           display: "flex", justifyContent: "space-between", alignItems: "center",
                           border: "1px solid rgba(255, 59, 48, 0.2)"
                         }}>
                           <div>
-                            <p style={{ color: "var(--red)", fontWeight: "600", fontSize: "14px" }}>Awaiting Crypto Payment</p>
-                            <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Please complete your {order.cryptoCurrency} payment to confirm this order.</p>
+                            <p style={{ color: "var(--red)", fontWeight: "600", fontSize: "14px" }}>Awaiting Payment</p>
+                            <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Please pay using your selected cryptocurrency.</p>
                           </div>
                           <a href={order.coinbaseChargeUrl} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ background: "var(--red)", border: "none" }}>
                             Pay Now
@@ -762,101 +778,124 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      {isCooldown && (
-                        <div style={{
-                          background: "var(--orange-bg)", padding: "14px",
-                          borderRadius: "var(--radius-md)", marginBottom: "12px",
-                          display: "flex", justifyContent: "space-between", alignItems: "center",
-                        }}>
-                          <div>
-                            <p style={{ color: "var(--orange)", fontWeight: "600", fontSize: "14px" }}>Processing</p>
-                            <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Preparing your FIFO batch allocation...</p>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <span style={{ fontWeight: "700", color: "var(--orange)", fontFamily: "monospace" }}>
-                              {secondsLeft > 0 ? `${secondsLeft}s` : "Ready"}
-                            </span>
-                            <button onClick={() => checkOrderStatus(order.id)} className="btn btn-secondary btn-sm">Check</button>
-                          </div>
-                        </div>
-                      )}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        {order.items.map(item => {
+                          const isCooldown = item.status === "COOLDOWN_ACTIVE";
+                          const secondsLeft = item.cooldownEndAt ? Math.max(0, Math.ceil((new Date(item.cooldownEndAt).getTime() - Date.now()) / 1000)) : 0;
+                          return (
+                            <div key={item.id} style={{ background: "var(--surface-subtle)", padding: "16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                                <div>
+                                  <h4 style={{ fontSize: "16px", marginBottom: "4px" }}>{item.product.name}</h4>
+                                  <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                                    Price: {formatPrice(Number(item.priceAtPurchase), user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}
+                                  </p>
+                                </div>
+                                <span className={`badge ${
+                                  item.status === "READY" ? "badge-green" :
+                                  item.status === "COOLDOWN_ACTIVE" ? "badge-orange" :
+                                  item.status === "PENDING_PAYMENT" ? "badge-red" :
+                                  item.status === "COMPLETED" ? "badge-blue" : ""
+                                }`}>{item.status.replace(/_/g, " ")}</span>
+                              </div>
 
-                      {order.inventoryItem && (
-                        <div style={{
-                          background: "var(--green-bg)", padding: "14px",
-                          borderRadius: "var(--radius-md)", marginBottom: "12px",
-                        }}>
-                          <p style={{ fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "6px" }}>ALLOCATED BATCH DATA</p>
-                          <p style={{
-                            background: "var(--bg-primary)", padding: "8px 12px",
-                            borderRadius: "var(--radius-sm)", fontFamily: "monospace",
-                            fontSize: "13px", color: "var(--green)", marginBottom: "6px",
-                            border: "1px solid var(--border)",
-                          }}>
-                            {order.inventoryItem.data}
-                          </p>
-                          {order.inventoryItem.locationData && (
-                            <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-                              📍 <strong>Location:</strong> {order.inventoryItem.locationData}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {(order as any).adminMessage && (
-                        <div style={{
-                          background: "var(--blue-bg)", padding: "14px",
-                          borderRadius: "var(--radius-md)", marginBottom: "12px",
-                          border: "1px solid rgba(0, 122, 255, 0.2)"
-                        }}>
-                          <p style={{ fontSize: "12px", color: "var(--blue)", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
-                            📍 Delivery Coordinates
-                          </p>
-                          <p style={{ fontSize: "14px", color: "var(--text-primary)", whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
-                            {(order as any).adminMessage}
-                          </p>
-                          {(order as any).adminMessageFileUrl && (
-                            <div style={{ marginTop: "12px" }}>
-                              {(order as any).adminMessageFileType?.startsWith("image/") ? (
-                                <img src={(order as any).adminMessageFileUrl} alt="Delivery attachment" style={{ maxWidth: "100%", maxHeight: "250px", borderRadius: "8px", border: "1px solid var(--border)" }} />
-                              ) : (order as any).adminMessageFileType?.startsWith("video/") ? (
-                                <video src={(order as any).adminMessageFileUrl} controls style={{ maxWidth: "100%", maxHeight: "250px", borderRadius: "8px", border: "1px solid var(--border)" }} />
-                              ) : (
-                                <a href={(order as any).adminMessageFileUrl} download className="btn btn-secondary btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                                  📥 Download Attachment ({(order as any).adminMessageFileType?.split("/")[1]?.toUpperCase() || "File"})
-                                </a>
+                              {isCooldown && (
+                                <div style={{
+                                  background: "var(--orange-bg)", padding: "10px 14px",
+                                  borderRadius: "var(--radius-sm)", marginBottom: "12px",
+                                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                                }}>
+                                  <p style={{ fontSize: "13px", color: "var(--orange)" }}>Preparing your batch allocation...</p>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <span style={{ fontWeight: "700", color: "var(--orange)", fontFamily: "monospace" }}>
+                                      {secondsLeft > 0 ? `${secondsLeft}s` : "Ready"}
+                                    </span>
+                                    <button onClick={() => checkOrderStatus(order.id)} className="btn btn-secondary btn-sm">Check</button>
+                                  </div>
+                                </div>
                               )}
-                            </div>
-                          )}
-                          {(order as any).adminMessageSentAt && (
-                            <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "8px", textAlign: "right" }}>
-                              Sent at {new Date((order as any).adminMessageSentAt).toLocaleString()}
-                            </p>
-                          )}
-                        </div>
-                      )}
 
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+                              {item.inventoryItem && (
+                                <div style={{
+                                  background: "var(--green-bg)", padding: "12px",
+                                  borderRadius: "var(--radius-sm)", marginBottom: "12px",
+                                }}>
+                                  <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "6px" }}>ALLOCATED BATCH DATA</p>
+                                  <p style={{
+                                    background: "var(--bg-primary)", padding: "8px 12px",
+                                    borderRadius: "var(--radius-sm)", fontFamily: "monospace",
+                                    fontSize: "13px", color: "var(--green)", marginBottom: "6px",
+                                    border: "1px solid var(--border)",
+                                  }}>
+                                    {item.inventoryItem.data}
+                                  </p>
+                                  {item.inventoryItem.locationData && (
+                                    <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                                      📍 <strong>Location:</strong> {item.inventoryItem.locationData}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {item.adminMessage && (
+                                <div style={{
+                                  background: "var(--blue-bg)", padding: "14px",
+                                  borderRadius: "var(--radius-md)", marginBottom: "12px",
+                                  border: "1px solid rgba(0, 122, 255, 0.2)"
+                                }}>
+                                  <p style={{ fontSize: "12px", color: "var(--blue)", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                                    📍 Delivery Coordinates / Message
+                                  </p>
+                                  <p style={{ fontSize: "14px", color: "var(--text-primary)", whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
+                                    {item.adminMessage}
+                                  </p>
+                                  {item.adminMessageFileUrl && (
+                                    <div style={{ marginTop: "12px" }}>
+                                      {item.adminMessageFileType?.startsWith("image/") ? (
+                                        <img src={item.adminMessageFileUrl} alt="Delivery attachment" style={{ maxWidth: "100%", maxHeight: "250px", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                                      ) : item.adminMessageFileType?.startsWith("video/") ? (
+                                        <video src={item.adminMessageFileUrl} controls style={{ maxWidth: "100%", maxHeight: "250px", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                                      ) : (
+                                        <a href={item.adminMessageFileUrl} download className="btn btn-secondary btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                          📥 Download Attachment ({item.adminMessageFileType?.split("/")[1]?.toUpperCase() || "File"})
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
+                                  {item.adminMessageSentAt && (
+                                    <p style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "8px", textAlign: "right" }}>
+                                      Sent at {new Date(item.adminMessageSentAt).toLocaleString()}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+                                {item.status === "READY" && (
+                                  <button onClick={() => completeOrder(order.id)} className="btn btn-primary btn-sm">Confirm Received</button>
+                                )}
+                                {(item.status === "READY" || item.status === "COMPLETED") && (
+                                  <button
+                                    onClick={() => { setSelectedOrderIdForDispute(order.id); setActiveTab("disputes"); }}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ color: "var(--orange)" }}
+                                  >
+                                    File Dispute
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "16px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <span style={{ fontWeight: "600" }}>{formatPrice(order.amountPaid, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</span>
+                          <span style={{ fontWeight: "600" }}>Total: {formatPrice(Number(order.totalAmount), user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</span>
                           {order.paymentMethod === "DIRECT_CRYPTO" ? (
                             <span className="badge badge-purple" style={{ fontSize: "10px" }}>Paid via {order.cryptoCurrency}</span>
                           ) : (
                             <span className="badge badge-green" style={{ fontSize: "10px" }}>Paid via Wallet</span>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: "8px" }}>
-                          {order.status === "READY" && (
-                            <button onClick={() => completeOrder(order.id)} className="btn btn-primary btn-sm">Confirm Received</button>
-                          )}
-                          {(order.status === "READY" || order.status === "COMPLETED") && (
-                            <button
-                              onClick={() => { setSelectedOrderIdForDispute(order.id); setActiveTab("disputes"); }}
-                              className="btn btn-ghost btn-sm"
-                              style={{ color: "var(--orange)" }}
-                            >
-                              File Dispute
-                            </button>
                           )}
                         </div>
                       </div>
@@ -889,7 +928,7 @@ export default function Dashboard() {
                         <option value="">Choose an order...</option>
                         {orders.map(o => (
                           <option key={o.id} value={o.id}>
-                            Order #{o.id.slice(0,8)} - {o.product.name} ({formatPrice(o.amountPaid, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)})
+                            Order #{o.id.slice(0,8)} - {o.items.map(i => i.product.name).join(", ")} ({formatPrice(Number(o.totalAmount), user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)})
                           </option>
                         ))}
                       </select>
