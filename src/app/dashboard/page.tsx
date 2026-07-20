@@ -57,7 +57,7 @@ interface DisputeMessage {
 interface Dispute {
   id: string; orderId: string; reason: string; status: string;
   resolutionType: string | null; createdAt: string;
-  order: { product: Product };
+  order: { items: { product: Product }[] };
   messages?: DisputeMessage[];
 }
 
@@ -970,7 +970,7 @@ export default function Dashboard() {
                   <div key={d.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
                       <div>
-                        <h4 style={{ marginBottom: "4px" }}>Ticket for {d.order.product.name}</h4>
+                        <h4 style={{ marginBottom: "4px" }}>Ticket for {d.order.items?.map(i => i.product?.name).join(", ")}</h4>
                         <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>Order ID: #{d.orderId.slice(0,8)}</span>
                       </div>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>

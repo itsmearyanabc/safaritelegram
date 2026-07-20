@@ -144,19 +144,27 @@ export default function CheckoutModal({ isOpen, onClose, user, onCheckoutSuccess
                   <div style={{ display: "flex", gap: "12px" }}>
                     <button
                       className={`btn ${paymentMethod === "WALLET" ? "btn-primary" : "btn-secondary"}`}
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px", padding: "12px" }}
                       onClick={() => setPaymentMethod("WALLET")}
                     >
-                      Wallet Balance
+                      <span style={{ fontWeight: "600" }}>Wallet Balance</span>
+                      <span style={{ fontSize: "12px", opacity: 0.8 }}>Available: {formatPrice(user?.wallet?.balance || 0, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}</span>
                     </button>
                     <button
                       className={`btn ${paymentMethod === "CRYPTO" ? "btn-primary" : "btn-secondary"}`}
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px", padding: "12px", justifyContent: "center" }}
                       onClick={() => setPaymentMethod("CRYPTO")}
                     >
-                      Direct Crypto
+                      <span style={{ fontWeight: "600" }}>Direct Crypto</span>
+                      <span style={{ fontSize: "12px", opacity: 0.8 }}>Pay with coins</span>
                     </button>
                   </div>
+                  
+                  {paymentMethod === "WALLET" && (user?.wallet?.balance || 0) < cartTotal && (
+                    <div className="alert alert-error" style={{ marginTop: "12px", padding: "8px 12px", fontSize: "13px" }}>
+                      Insufficient funds. You need {formatPrice(cartTotal - (user?.wallet?.balance || 0), user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)} more in your wallet.
+                    </div>
+                  )}
                 </div>
 
                 {paymentMethod === "CRYPTO" && (
@@ -176,9 +184,9 @@ export default function CheckoutModal({ isOpen, onClose, user, onCheckoutSuccess
 
                 <button
                   className="btn btn-primary"
-                  style={{ width: "100%", padding: "14px", fontSize: "16px" }}
+                  style={{ width: "100%", padding: "14px", fontSize: "16px", opacity: isProcessing || (paymentMethod === "WALLET" && (user?.wallet?.balance || 0) < cartTotal) ? 0.5 : 1 }}
                   onClick={handleCheckout}
-                  disabled={isProcessing}
+                  disabled={isProcessing || (paymentMethod === "WALLET" && (user?.wallet?.balance || 0) < cartTotal)}
                 >
                   {isProcessing ? "Processing..." : `Pay ${formatPrice(cartTotal, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}`}
                 </button>
