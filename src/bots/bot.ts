@@ -276,13 +276,21 @@ export function createTelegramBot(token: string, botName: string) {
         return tx.order.create({
           data: {
             userId: user.id,
-            productId: product.id,
-            inventoryItemId: item.id,
-            amountPaid: product.price,
+            totalAmount: product.price,
             status: "COOLDOWN_ACTIVE",
-            cooldownEndAt: new Date(Date.now() + 30 * 1000),
             orderSource: "TELEGRAM",
             paymentMethod: "WALLET",
+            items: {
+              create: [
+                {
+                  productId: product.id,
+                  inventoryItemId: item.id,
+                  priceAtPurchase: product.price,
+                  status: "COOLDOWN_ACTIVE",
+                  cooldownEndAt: new Date(Date.now() + 30 * 1000),
+                }
+              ]
+            }
           },
         });
       });
@@ -367,7 +375,7 @@ export function createTelegramBot(token: string, botName: string) {
 
     const orders = await prisma.order.findMany({
       where: { userId: user.id },
-      include: { product: true },
+      include: { items: { include: { product: true } } },
       orderBy: { createdAt: "desc" },
       take: 6,
     });
@@ -379,7 +387,9 @@ export function createTelegramBot(token: string, botName: string) {
       text += `_No orders found. Buy chemical compounds in the Shop._`;
     } else {
       orders.forEach((o) => {
-        text += `• *Order #${o.id.substring(0, 8)}...* - ${esc(o.product.name)} (${esc(o.status)})\n`;
+        const productName = o.items.length > 0 ? o.items[0].product.name : "Items";
+        const title = o.items.length > 1 ? `${productName} +${o.items.length - 1}` : productName;
+        text += `• *Order #${o.id.substring(0, 8)}...* - ${esc(title)} (${esc(o.status)})\n`;
         keyboard.text(`View #${o.id.substring(0, 8)}`, `order_${o.id}`).row();
       });
     }
@@ -403,7 +413,7 @@ export function createTelegramBot(token: string, botName: string) {
     const orderId = ctx.match[1];
     let order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { product: true, inventoryItem: true },
+      include: { items: { include: { product: true, inventoryItem: true } } },
     });
 
     if (!order || order.userId !== user.id) {
@@ -411,38 +421,70 @@ export function createTelegramBot(token: string, botName: string) {
       return;
     }
 
-    if (order.status === "COOLDOWN_ACTIVE" && order.cooldownEndAt) {
-      if (new Date() >= order.cooldownEndAt) {
+    let itemsUpdated = false;
+    for (const item of order.items) {
+      if (item.status === "COOLDOWN_ACTIVE" && item.cooldownEndAt) {
+        if (new Date() >= item.cooldownEndAt) {
+          await prisma.orderItem.update({
+            where: { id: item.id },
+            data: { status: "READY" },
+          });
+          itemsUpdated = true;
+        }
+      }
+    }
+
+    if (itemsUpdated) {
+      order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: { include: { product: true, inventoryItem: true } } },
+      });
+      if (order && order.items.every(i => i.status === "READY" || i.status === "COMPLETED")) {
         order = await prisma.order.update({
           where: { id: orderId },
           data: { status: "READY" },
-          include: { product: true, inventoryItem: true },
+          include: { items: { include: { product: true, inventoryItem: true } } },
         });
       }
     }
 
     let text =
-      `📦 *Order Details*\n\n` +
-      `Product: *${esc(order.product.name)}*\n` +
-      `Value: *$${Number(order.amountPaid).toFixed(2)}*\n` +
-      `Status: *${esc(order.status)}*\n\n`;
+      `📦 *Order Details (#${orderId.substring(0,8)})*\n` +
+      `Value: *$${Number(order!.totalAmount).toFixed(2)}*\n` +
+      `Master Status: *${esc(order!.status)}*\n\n`;
 
     const keyboard = new InlineKeyboard();
+    let hasCooldown = false;
+    let canComplete = false;
 
-    if (order.status === "COOLDOWN_ACTIVE") {
-      const secLeft = Math.max(0, Math.ceil((new Date(order.cooldownEndAt!).getTime() - Date.now()) / 1000));
-      text += `⚠️ *Cooldown Timer Active.*\nEstimated delivery details in: *${secLeft} seconds*.\nRefresh using the button below.`;
-      keyboard.text("🔄 Refresh Status", `order_${order.id}`).row();
-    } else if (order.status === "READY" || order.status === "COMPLETED") {
-      text += `📍 *FIFO Batch Pickup Details*:\n`;
-      text += `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data ?? "N/A"}\`\n`;
-      text += `📌 *Coordinates/Location:* \`${order.inventoryItem?.locationData || "N/A"}\`\n`;
-
-      if (order.status === "READY") {
-        keyboard.text("✅ Confirm Collection (Complete)", `complete_${order.id}`).row();
+    order!.items.forEach((item) => {
+      text += `🧪 *${esc(item.product.name)}*\n`;
+      text += `Status: *${esc(item.status)}*\n`;
+      
+      if (item.status === "COOLDOWN_ACTIVE") {
+        hasCooldown = true;
+        const secLeft = Math.max(0, Math.ceil((new Date(item.cooldownEndAt!).getTime() - Date.now()) / 1000));
+        text += `⚠️ *Cooldown Timer Active.*\nEstimated delivery details in: *${secLeft} seconds*.\n`;
+      } else if (item.status === "READY" || item.status === "COMPLETED") {
+        text += `📍 *FIFO Batch Pickup Details*:\n`;
+        text += `🔑 *Locker/Serial Code:* \`${item.inventoryItem?.data ?? "N/A"}\`\n`;
+        text += `📌 *Coordinates/Location:* \`${item.inventoryItem?.locationData || "N/A"}\`\n`;
+        if (item.status === "READY") canComplete = true;
+      } else if (item.status === "REFUNDED") {
+        text += `ℹ️ *Refund credited.*\n`;
       }
-    } else if (order.status === "REFUNDED") {
-      text += `ℹ️ *Refund credited.* The dispute was resolved and the money was returned to your wallet balance.`;
+      text += `\n`;
+    });
+
+    if (hasCooldown) {
+      keyboard.text("🔄 Refresh Status", `order_${order!.id}`).row();
+    }
+    if (canComplete && order!.status === "READY") {
+      keyboard.text("✅ Confirm Collection (Complete All)", `complete_${order!.id}`).row();
+    }
+
+    if (order!.status === "REFUNDED") {
+      text += `\nℹ️ *Refund credited.* The dispute was resolved and the money was returned to your wallet balance.`;
     }
 
     keyboard.text("⬅️ Back to Orders List", "orders_menu");
@@ -472,28 +514,38 @@ export function createTelegramBot(token: string, botName: string) {
       return;
     }
 
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: "COMPLETED" },
+    await prisma.$transaction(async (tx) => {
+      await tx.orderItem.updateMany({
+        where: { orderId: orderId, status: "READY" },
+        data: { status: "COMPLETED" },
+      });
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: "COMPLETED" },
+      });
     });
 
     await ctx.answerCallbackQuery({ text: "🎉 Order marked as Completed!" });
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { product: true, inventoryItem: true },
+      include: { items: { include: { product: true, inventoryItem: true } } },
     });
 
     if (!order) return;
 
-    const text =
-      `📦 *Order Details*\n\n` +
-      `Product: *${esc(order.product.name)}*\n` +
-      `Value: *$${Number(order.amountPaid).toFixed(2)}*\n` +
-      `Status: *${esc(order.status)}*\n\n` +
-      `📍 *FIFO Batch Pickup Details*:\n` +
-      `🔑 *Locker/Serial Code:* \`${order.inventoryItem?.data ?? "N/A"}\`\n` +
-      `📌 *Coordinates/Location:* \`${order.inventoryItem?.locationData || "N/A"}\`\n`;
+    let text =
+      `📦 *Order Details (#${order.id.substring(0,8)})*\n` +
+      `Value: *$${Number(order.totalAmount).toFixed(2)}*\n` +
+      `Master Status: *${esc(order.status)}*\n\n`;
+
+    order.items.forEach((item) => {
+      text += `🧪 *${esc(item.product.name)}*\n`;
+      text += `Status: *${esc(item.status)}*\n`;
+      text += `📍 *FIFO Batch Pickup Details*:\n`;
+      text += `🔑 *Locker/Serial Code:* \`${item.inventoryItem?.data ?? "N/A"}\`\n`;
+      text += `📌 *Coordinates/Location:* \`${item.inventoryItem?.locationData || "N/A"}\`\n\n`;
+    });
 
     const keyboard = new InlineKeyboard().text("⬅️ Back to Orders List", "orders_menu");
 
@@ -512,7 +564,7 @@ export function createTelegramBot(token: string, botName: string) {
 
     const disputes = await prisma.dispute.findMany({
       where: { userId: user.id },
-      include: { order: { include: { product: true } } },
+      include: { order: { include: { items: { include: { product: true } } } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -522,7 +574,9 @@ export function createTelegramBot(token: string, botName: string) {
       text += `_No disputes submitted._`;
     } else {
       disputes.forEach((d) => {
-        text += `• *Dispute for ${esc(d.order.product.name)}* - [${esc(d.status)}]\n  Claim: "${esc(d.reason)}"\n`;
+        const productName = d.order.items.length > 0 ? d.order.items[0].product.name : "Items";
+        const title = d.order.items.length > 1 ? `${productName} +${d.order.items.length - 1}` : productName;
+        text += `• *Dispute for ${esc(title)}* - [${esc(d.status)}]\n  Claim: "${esc(d.reason)}"\n`;
         if (d.status === "RESOLVED" && d.resolutionType) {
           text += `  Resolution: *${esc(d.resolutionType)}*\n`;
         }

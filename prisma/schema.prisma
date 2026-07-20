@@ -71,7 +71,7 @@ model Product {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   items       InventoryItem[]
-  orders      Order[]
+  orderItems  OrderItem[]
 
   @@index([categoryId])
 }
@@ -86,7 +86,7 @@ model InventoryItem {
   isAllocated  Boolean   @default(false)
   allocatedAt  DateTime?
   createdAt    DateTime  @default(now())
-  orders       Order[]
+  orderItems   OrderItem[]
 
   @@index([productId])
   @@index([isAllocated])
@@ -96,19 +96,11 @@ model Order {
   id              String         @id @default(uuid())
   userId          String
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  inventoryItemId String?
-  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
-  amountPaid      Decimal        @db.Decimal(12, 2)
+  totalAmount     Decimal        @db.Decimal(12, 2)
   currency        String         @default("USD")
-  status          String         @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAYMENT_CONFIRMING, PAID, COOLDOWN_ACTIVE, READY, COMPLETED, REFUNDED, FAILED
-  cooldownEndAt   DateTime?
+  status          String         @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAYMENT_CONFIRMING, PAID, COMPLETED, REFUNDED, FAILED
   orderSource     String         @default("WEBSITE") // WEBSITE, TELEGRAM
-  adminMessage    String?
-  adminMessageFileUrl  String?
-  adminMessageFileType String?
-  adminMessageSentAt DateTime?
+  
   paymentMethod      String         @default("DIRECT_CRYPTO") // WALLET, DIRECT_CRYPTO
   cryptoCurrency     String?        // BTC, ETH, USDT_ERC20, USDT_TRC20, SOL, TRX
   cryptoAmountDue    String?        // Amount customer must send in chosen coin
@@ -118,9 +110,32 @@ model Order {
   coinbaseChargeUrl  String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  
+  items              OrderItem[]
   disputes           Dispute[]
 
   @@index([userId])
+  @@index([status])
+}
+
+model OrderItem {
+  id              String         @id @default(uuid())
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  priceAtPurchase Decimal        @db.Decimal(12, 2)
+  status          String         @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAID, COOLDOWN_ACTIVE, READY, COMPLETED, REFUNDED, FAILED
+  cooldownEndAt   DateTime?
+  
+  adminMessage    String?
+  adminMessageFileUrl  String?
+  adminMessageFileType String?
+  adminMessageSentAt DateTime?
+
+  @@index([orderId])
   @@index([productId])
   @@index([status])
 }

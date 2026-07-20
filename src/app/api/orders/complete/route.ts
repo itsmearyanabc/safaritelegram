@@ -30,13 +30,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Only orders in READY state can be marked as COMPLETED" }, { status: 400 });
     }
 
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: "COMPLETED" },
-      include: {
-        product: true,
-        inventoryItem: true,
-      },
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      // Update all items
+      await tx.orderItem.updateMany({
+        where: { orderId: orderId, status: "READY" },
+        data: { status: "COMPLETED" },
+      });
+
+      // Update master order
+      return await tx.order.update({
+        where: { id: orderId },
+        data: { status: "COMPLETED" },
+        include: {
+          items: {
+            include: { product: true, inventoryItem: true }
+          },
+        },
+      });
     });
 
     return NextResponse.json({ success: true, order: updatedOrder });

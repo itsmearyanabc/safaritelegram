@@ -17,8 +17,9 @@ export async function POST(req: Request) {
     let order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        product: true,
-        inventoryItem: true,
+        items: {
+          include: { product: true, inventoryItem: true }
+        }
       },
     });
 
@@ -31,34 +32,64 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized access to order" }, { status: 403 });
     }
 
-    // Check if cooldown has finished
-    if (order.status === "COOLDOWN_ACTIVE" && order.cooldownEndAt) {
-      const now = new Date();
-      if (now >= order.cooldownEndAt) {
+    let itemsUpdated = false;
+
+    // Check if cooldown has finished for each item
+    for (const item of order.items) {
+      if (item.status === "COOLDOWN_ACTIVE" && item.cooldownEndAt) {
+        const now = new Date();
+        if (now >= item.cooldownEndAt) {
+          await prisma.orderItem.update({
+            where: { id: item.id },
+            data: { status: "READY" },
+          });
+          itemsUpdated = true;
+        }
+      }
+    }
+
+    if (itemsUpdated) {
+      order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            include: { product: true, inventoryItem: true }
+          }
+        },
+      });
+      // If all items are READY or COMPLETED, update master order status
+      if (order && order.items.every(i => i.status === "READY" || i.status === "COMPLETED")) {
         order = await prisma.order.update({
           where: { id: orderId },
           data: { status: "READY" },
           include: {
-            product: true,
-            inventoryItem: true,
+            items: {
+              include: { product: true, inventoryItem: true }
+            }
           },
         });
       }
     }
 
-    // Clean sensitive data if still in cooldown
-    const isCooldownActive = order.status === "COOLDOWN_ACTIVE" && order.cooldownEndAt && new Date(order.cooldownEndAt).getTime() > Date.now();
-    const cleanInventoryItem = isCooldownActive || !order.inventoryItem ? null : {
-      id: order.inventoryItem.id,
-      mediaUrl: order.inventoryItem.mediaUrl,
-      locationData: order.inventoryItem.locationData,
-      data: order.status === "READY" || order.status === "COMPLETED" ? order.inventoryItem.data : "[Available after Cooldown]",
-    };
+    // Clean sensitive data if still in cooldown per item
+    const formattedItems = order!.items.map((item) => {
+      const isCooldownActive = item.status === "COOLDOWN_ACTIVE" && item.cooldownEndAt && new Date(item.cooldownEndAt).getTime() > Date.now();
+      const cleanInventoryItem = isCooldownActive || !item.inventoryItem ? null : {
+        id: item.inventoryItem.id,
+        mediaUrl: item.inventoryItem.mediaUrl,
+        locationData: item.inventoryItem.locationData,
+        data: item.status === "READY" || item.status === "COMPLETED" ? item.inventoryItem.data : "[Available after Cooldown]",
+      };
+      return {
+        ...item,
+        inventoryItem: cleanInventoryItem,
+      };
+    });
 
     return NextResponse.json({
       order: {
         ...order,
-        inventoryItem: cleanInventoryItem,
+        items: formattedItems,
       },
     });
   } catch (error) {

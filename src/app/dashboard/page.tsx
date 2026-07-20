@@ -8,6 +8,8 @@ import SiteFooter from "@/components/SiteFooter";
 import DashboardNav from "@/components/DashboardNav";
 import { formatPrice } from "@/lib/currencies";
 import styles from "./dashboard.module.css";
+import CartWidget from "@/components/cart/CartWidget";
+import CheckoutModal from "@/components/cart/CheckoutModal";
 
 interface Product {
   id: string; name: string; description: string; price: number;
@@ -55,6 +57,8 @@ export default function Dashboard() {
   const [depositAmount, setDepositAmount] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
   const [selectedOrderIdForDispute, setSelectedOrderIdForDispute] = useState<string | null>(null);
+  
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   
   // Raise Ticket states
   const [raiseTicketOpen, setRaiseTicketOpen] = useState(false);
@@ -230,6 +234,14 @@ export default function Dashboard() {
       setTgMsg({ type: "error", text: "An error occurred" });
     }
     setTgLoading(false);
+  };
+
+  const handleCheckoutSuccess = async () => {
+    setIsCheckoutOpen(false);
+    setShopMsg({ type: "success", text: "Order placed successfully! Cooldown active." });
+    loadOrdersData();
+    checkSession();
+    setActiveTab("orders");
   };
 
   const handleDeposit = async (e: React.FormEvent) => {
@@ -1285,6 +1297,10 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      <CartWidget onOpenCart={() => setIsCheckoutOpen(true)} currency={user?.wallet?.currency} exchangeRate={user?.wallet?.exchangeRate} />
+      <CheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} user={user} onCheckoutSuccess={handleCheckoutSuccess} />
+
       <SiteFooter />
     </div>
   );

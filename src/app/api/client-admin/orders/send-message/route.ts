@@ -12,19 +12,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orderId, message, file, fileName, fileType } = await req.json();
+    const { orderItemId, message, file, fileName, fileType } = await req.json();
 
-    if (!orderId || !message) {
-      return NextResponse.json({ error: "Order ID and message are required" }, { status: 400 });
+    if (!orderItemId || !message) {
+      return NextResponse.json({ error: "Order Item ID and message are required" }, { status: 400 });
     }
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { user: true, product: true },
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: orderItemId },
+      include: { 
+        product: true,
+        order: {
+          include: { user: true, items: true }
+        }
+      },
     });
 
-    if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    if (!orderItem) {
+      return NextResponse.json({ error: "Order Item not found" }, { status: 404 });
     }
 
     // Save file locally if provided
@@ -43,7 +48,7 @@ export async function POST(req: Request) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
-      const uniqueFileName = `${orderId}-${Date.now()}-${fileName}`;
+      const uniqueFileName = `${orderItemId}-${Date.now()}-${fileName}`;
       const filePath = path.join(uploadDir, uniqueFileName);
       fs.writeFileSync(filePath, fileBuffer);
       fileUrl = `/uploads/attachments/${uniqueFileName}`;
@@ -51,40 +56,57 @@ export async function POST(req: Request) {
     }
 
     // Determine new status. If COOLDOWN_ACTIVE or PAID, progress to READY.
-    let newStatus = order.status;
-    if (["COOLDOWN_ACTIVE", "PAID"].includes(order.status)) {
+    let newStatus = orderItem.status;
+    if (["COOLDOWN_ACTIVE", "PAID", "PENDING_PAYMENT"].includes(orderItem.status)) {
       newStatus = "READY";
     }
 
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        adminMessage: message,
-        adminMessageFileUrl: fileUrl,
-        adminMessageFileType: localFileType,
-        adminMessageSentAt: new Date(),
-        status: newStatus,
-      },
+    const updatedOrderItem = await prisma.$transaction(async (tx) => {
+      const item = await tx.orderItem.update({
+        where: { id: orderItemId },
+        data: {
+          adminMessage: message,
+          adminMessageFileUrl: fileUrl,
+          adminMessageFileType: localFileType,
+          adminMessageSentAt: new Date(),
+          status: newStatus,
+        },
+      });
+
+      // Check if all items in order are ready
+      const allItems = await tx.orderItem.findMany({ where: { orderId: orderItem.orderId } });
+      const allReady = allItems.every(i => i.status === "READY" || i.status === "COMPLETED");
+      
+      if (allReady) {
+        await tx.order.update({
+          where: { id: orderItem.orderId },
+          data: { status: "READY" },
+        });
+      }
+
+      return item;
     });
 
     let telegramSent = false;
     let telegramError: string | null = null;
 
+    const user = orderItem.order.user;
+
     // Telegram Bot Integration - send message if user has linked their Telegram
-    if (order.user.telegramId) {
+    if (user.telegramId) {
       const botToken = process.env.TELEGRAM_BOT_1_TOKEN?.trim().replace(/^["']|["']$/g, "");
       if (botToken && botToken !== "PLACEHOLDER_BOT_1_TOKEN") {
         try {
           const telegramMessage =
-            `📦 *Order Update for ${escapeTelegramMarkdown(order.product.name)}*\n\n` +
+            `📦 *Order Update for ${escapeTelegramMarkdown(orderItem.product.name)}*\n\n` +
             `Admin sent coordinates/details:\n` +
             `\`${String(message).replace(/`/g, "'")}\`\n\n` +
-            `Status updated to: *${escapeTelegramMarkdown(newStatus)}*`;
+            `Item Status updated to: *${escapeTelegramMarkdown(newStatus)}*`;
 
           if (fileBuffer && fileName && localFileType) {
             // Send as file attachment using multipart FormData
             const formData = new FormData();
-            formData.append("chat_id", order.user.telegramId);
+            formData.append("chat_id", user.telegramId);
 
             // Determine method and field based on file type
             let method = "sendDocument";
@@ -124,7 +146,7 @@ export async function POST(req: Request) {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                chat_id: order.user.telegramId,
+                chat_id: user.telegramId,
                 text: telegramMessage,
                 parse_mode: "Markdown",
               }),
@@ -154,7 +176,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      order: updatedOrder,
+      orderItem: updatedOrderItem,
       telegramSent,
       telegramError: telegramSent ? null : telegramError,
     });

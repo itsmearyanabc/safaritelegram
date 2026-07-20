@@ -10,94 +10,127 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { productId } = await req.json();
-    if (!productId) {
-      return NextResponse.json({ error: "Product ID is required" }, { status: 400 });
-    }
-
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
-
-    if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    const { cart, paymentMethod } = await req.json();
+    
+    if (!cart || !Array.isArray(cart) || cart.length === 0) {
+      return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
 
     // Process checkout using database transactions to avoid race conditions
     const order = await prisma.$transaction(async (tx) => {
-      // 1. Fetch user wallet and check balance
+      // 1. Fetch user wallet
       const wallet = await tx.wallet.findUnique({
         where: { userId: session.userId },
       });
 
-      if (!wallet || Number(wallet.balance) < Number(product.price)) {
-        throw new Error("Insufficient wallet balance. Please deposit funds.");
+      if (!wallet) throw new Error("Wallet not found.");
+
+      let totalAmountDue = 0;
+      const orderItemsData = [];
+      const claimedInventoryIds: string[] = [];
+      const updatedProductIds: string[] = [];
+
+      // 2. Validate inventory and calculate total price
+      for (const cartItem of cart) {
+        const { productId, quantity } = cartItem;
+        
+        const product = await tx.product.findUnique({
+          where: { id: productId },
+        });
+
+        if (!product) throw new Error(`Product not found: ${productId}`);
+
+        // Fetch oldest unallocated items for this product
+        const items = await tx.inventoryItem.findMany({
+          where: { productId, isAllocated: false },
+          orderBy: { createdAt: "asc" }, // FIFO ordering
+          take: quantity,
+        });
+
+        if (items.length < quantity) {
+          throw new Error(`Not enough stock for ${product.name}. Requested: ${quantity}, Available: ${items.length}`);
+        }
+
+        const itemCost = Number(product.price);
+        totalAmountDue += itemCost * quantity;
+
+        for (const item of items) {
+          claimedInventoryIds.push(item.id);
+          orderItemsData.push({
+            productId: product.id,
+            inventoryItemId: item.id,
+            priceAtPurchase: product.price,
+            status: "COOLDOWN_ACTIVE",
+            cooldownEndAt: new Date(Date.now() + 30 * 1000), // 30 sec cooldown
+          });
+        }
+        
+        if (!updatedProductIds.includes(product.id)) {
+          updatedProductIds.push(product.id);
+        }
       }
-      // Removed currency mismatch check. Both wallet.balance and product.price are stored in USD.
-      // wallet.currency is purely a display preference for the frontend.
 
-      // 2. Fetch oldest unallocated item for the product (FIFO)
-      const item = await tx.inventoryItem.findFirst({
-        where: { productId, isAllocated: false },
-        orderBy: { createdAt: "asc" }, // FIFO ordering
-      });
+      // 3. Handle Wallet Payment
+      if (paymentMethod === "WALLET") {
+        if (Number(wallet.balance) < totalAmountDue) {
+          throw new Error("Insufficient wallet balance. Please deposit funds or select Crypto.");
+        }
 
-      if (!item) {
-        throw new Error("This product is currently out of stock.");
+        // Deduct from wallet balance
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { decrement: totalAmountDue } },
+        });
+
+        // Create ledger entry
+        await tx.walletLedger.create({
+          data: {
+            walletId: wallet.id,
+            type: "PURCHASE",
+            amount: -totalAmountDue,
+            description: `Checkout of ${cart.length} item(s)`,
+          },
+        });
       }
 
-      // 3. Deduct from wallet balance
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { decrement: product.price } },
-      });
-
-      // 4. Create ledger entry
-      await tx.walletLedger.create({
-        data: {
-          walletId: wallet.id,
-          type: "PURCHASE",
-          amount: -product.price,
-          description: `Purchase of compound: ${product.name} (${product.formula || "N/A"})`,
-        },
-      });
-
-      // 5. Mark item as allocated
+      // 4. Mark items as allocated
       const claimed = await tx.inventoryItem.updateMany({
-        where: { id: item.id, isAllocated: false },
+        where: { id: { in: claimedInventoryIds }, isAllocated: false },
         data: { isAllocated: true, allocatedAt: new Date() },
       });
-      if (claimed.count !== 1) {
-        throw new Error("This item was just purchased by another customer. Please try again.");
+      
+      if (claimed.count !== claimedInventoryIds.length) {
+        throw new Error("Some items were just purchased by another customer. Please try again.");
       }
 
-      // 6. Recalculate and update stock state
-      const unallocatedCount = await tx.inventoryItem.count({
-        where: { productId, isAllocated: false },
-      });
+      // 5. Recalculate and update stock state for affected products
+      for (const pid of updatedProductIds) {
+        const unallocatedCount = await tx.inventoryItem.count({
+          where: { productId: pid, isAllocated: false },
+        });
 
-      await tx.product.update({
-        where: { id: productId },
-        data: { stockState: getStockState(unallocatedCount) },
-      });
+        await tx.product.update({
+          where: { id: pid },
+          data: { stockState: getStockState(unallocatedCount) },
+        });
+      }
 
-      // 7. Create Order with Cooldown Active (30 seconds for simulated packing/processing)
-      const cooldownSeconds = 30;
-      const cooldownEndAt = new Date(Date.now() + cooldownSeconds * 1000);
-
+      // 6. Create Master Order and OrderItems
       const createdOrder = await tx.order.create({
         data: {
           userId: session.userId,
-          productId: product.id,
-          inventoryItemId: item.id,
-          amountPaid: product.price,
-          status: "COOLDOWN_ACTIVE",
-          cooldownEndAt,
+          totalAmount: totalAmountDue,
+          status: paymentMethod === "WALLET" ? "COOLDOWN_ACTIVE" : "PENDING_PAYMENT",
           orderSource: "WEBSITE",
-          paymentMethod: "WALLET",
+          paymentMethod: paymentMethod || "WALLET",
+          items: {
+            create: orderItemsData,
+          },
         },
         include: {
-          product: true,
+          items: {
+            include: { product: true }
+          }
         },
       });
 
@@ -107,7 +140,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, order });
   } catch (error: any) {
     const msg = error?.message || "";
-    const isUserError = msg.includes("Insufficient") || msg.includes("out of stock");
+    const isUserError = msg.includes("Insufficient") || msg.includes("Not enough stock") || msg.includes("another customer");
     return NextResponse.json({ error: isUserError ? msg : "Checkout failed" }, { status: isUserError ? 400 : 500 });
   }
 }

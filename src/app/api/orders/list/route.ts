@@ -16,8 +16,9 @@ export async function GET() {
       orders = await prisma.order.findMany({
         include: {
           user: { select: { username: true, telegramUsername: true } },
-          product: true,
-          inventoryItem: true,
+          items: {
+            include: { product: true, inventoryItem: true }
+          }
         },
         orderBy: { createdAt: "desc" },
       });
@@ -26,28 +27,30 @@ export async function GET() {
       orders = await prisma.order.findMany({
         where: { userId: session.userId },
         include: {
-          product: true,
-          inventoryItem: true,
+          items: {
+            include: { product: true, inventoryItem: true }
+          }
         },
         orderBy: { createdAt: "desc" },
       });
     }
 
-    // Safety: Hide inventory item sensitive details if cooldown is still active
+    // Safety: Hide inventory item sensitive details if cooldown is still active per item
     const formattedOrders = orders.map((order) => {
-      const isCooldownActive = order.status === "COOLDOWN_ACTIVE" && order.cooldownEndAt && order.cooldownEndAt.getTime() > Date.now();
-      
       return {
         ...order,
-        orderSource: order.orderSource,
-        adminMessage: order.adminMessage,
-        adminMessageSentAt: order.adminMessageSentAt,
-        inventoryItem: isCooldownActive || !order.inventoryItem ? null : {
-          id: order.inventoryItem.id,
-          mediaUrl: order.inventoryItem.mediaUrl,
-          locationData: order.inventoryItem.locationData,
-          data: order.status === "READY" || order.status === "COMPLETED" ? order.inventoryItem.data : "[Available after Cooldown]",
-        },
+        items: order.items.map((item) => {
+          const isCooldownActive = item.status === "COOLDOWN_ACTIVE" && item.cooldownEndAt && item.cooldownEndAt.getTime() > Date.now();
+          return {
+            ...item,
+            inventoryItem: isCooldownActive || !item.inventoryItem ? null : {
+              id: item.inventoryItem.id,
+              mediaUrl: item.inventoryItem.mediaUrl,
+              locationData: item.inventoryItem.locationData,
+              data: item.status === "READY" || item.status === "COMPLETED" ? item.inventoryItem.data : "[Available after Cooldown]",
+            }
+          };
+        })
       };
     });
 

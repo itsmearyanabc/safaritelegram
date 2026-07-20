@@ -7,6 +7,9 @@ import DashboardNav from "@/components/DashboardNav";
 import SiteFooter from "@/components/SiteFooter";
 import { formatPrice } from "@/lib/currencies";
 import styles from "../../dashboard.module.css";
+import { useCart } from "@/components/cart/CartContext";
+import CartWidget from "@/components/cart/CartWidget";
+import CheckoutModal from "@/components/cart/CheckoutModal";
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "SafariBoys_bot";
 
@@ -20,8 +23,10 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const [msg, setMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<any>("shop"); // Mock active tab for nav
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  // Mock variants removed as per user request to use real data
+  const { addToCart, updateQuantity, cart } = useCart();
+  const cartItem = cart.find(item => item.productId === product?.id);
 
   useEffect(() => {
     (async () => {
@@ -86,27 +91,22 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
     router.push("/");
   };
 
-  const handleBuy = async (variantPrice: number) => {
-    setMsg(null);
+  const handleCheckoutSuccess = async () => {
+    setIsCheckoutOpen(false);
+    setMsg({ type: "success", text: "Order placed successfully! Cooldown active." });
+    
+    // Refresh user balance & orders
     try {
-      const r = await fetch("/api/orders/checkout", { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ productId: product.id }) 
-      });
-      const d = await r.json();
-      if (!r.ok) { 
-        setMsg({ type: "error", text: d.error || "Purchase failed" }); 
-        return; 
-      }
-      setMsg({ type: "success", text: `Order placed! Cooldown active.` });
-      // Refresh user balance
-      const rMe = await fetch("/api/auth/me");
+      const [rMe, ordRes] = await Promise.all([
+        fetch("/api/auth/me"),
+        fetch("/api/orders/list")
+      ]);
       const dMe = await rMe.json();
       if (dMe.user) setUser(dMe.user);
-    } catch {
-      setMsg({ type: "error", text: "Error processing purchase" });
-    }
+      
+      const ordData = await ordRes.json();
+      if (ordRes.ok) setOrders(ordData.orders || []);
+    } catch {}
   };
 
   if (loading || !user) {
@@ -182,7 +182,6 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                     {product.description || "No description provided."}
                   </p>
 
-                  {/* Purchase Action */}
                   <div className="card" style={{ padding: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "3px solid var(--accent)" }}>
                     <div>
                       <h3 style={{ marginBottom: "4px" }}>Purchase {product.name}</h3>
@@ -194,14 +193,22 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                       <span style={{ fontSize: "24px", fontWeight: "800", color: "var(--text-primary)" }}>
                         {formatPrice(product.price, user?.wallet?.currency || "USD", user?.wallet?.exchangeRate || 1)}
                       </span>
-                      <button 
-                        onClick={() => handleBuy(product.price)}
-                        className="btn btn-primary" 
-                        disabled={product.stockCount < 1}
-                        style={{ padding: "12px 24px", fontSize: "16px" }}
-                      >
-                        {product.stockCount > 0 ? "Buy Now" : "Out of Stock"}
-                      </button>
+                      {cartItem ? (
+                        <div style={{ display: "flex", alignItems: "center", background: "var(--background)", borderRadius: "var(--radius-sm)", overflow: "hidden", border: "1px solid var(--border)" }}>
+                          <button onClick={() => updateQuantity(product.id, -1)} style={{ padding: "8px 16px", background: "none", border: "none", cursor: "pointer", color: "var(--text-primary)" }}>-</button>
+                          <span style={{ padding: "8px 16px", fontWeight: "600", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>{cartItem.quantity}</span>
+                          <button onClick={() => updateQuantity(product.id, 1)} disabled={cartItem.quantity >= product.stockCount} style={{ padding: "8px 16px", background: "none", border: "none", cursor: cartItem.quantity >= product.stockCount ? "not-allowed" : "pointer", color: "var(--text-primary)", opacity: cartItem.quantity >= product.stockCount ? 0.5 : 1 }}>+</button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => addToCart({ id: product.id, name: product.name, price: product.price, stockCount: product.stockCount })}
+                          className="btn btn-primary" 
+                          disabled={product.stockCount < 1}
+                          style={{ padding: "12px 24px", fontSize: "16px" }}
+                        >
+                          {product.stockCount > 0 ? "Add to Cart" : "Out of Stock"}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -212,6 +219,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
         </main>
       </div>
       <SiteFooter />
+      <CartWidget onOpenCart={() => setIsCheckoutOpen(true)} currency={user?.wallet?.currency} exchangeRate={user?.wallet?.exchangeRate} />
+      <CheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} user={user} onCheckoutSuccess={handleCheckoutSuccess} />
     </div>
   );
 }

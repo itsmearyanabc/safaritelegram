@@ -19,8 +19,12 @@ export async function GET() {
             passwordPlain: true,
           } 
         },
-        product: { select: { name: true, price: true } },
-        inventoryItem: true,
+        items: {
+          include: { 
+            product: { select: { name: true, price: true } },
+            inventoryItem: true,
+          }
+        },
       },
       orderBy: { createdAt: "desc" },
     });

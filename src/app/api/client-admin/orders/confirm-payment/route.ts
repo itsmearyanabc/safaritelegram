@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { product: true },
+      include: { items: { include: { product: true } } },
     });
 
     if (!order) {
@@ -29,61 +29,79 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Order is not awaiting payment" }, { status: 400 });
     }
 
-    // Use a transaction to safely allocate item
+    // Use a transaction to safely allocate items
     await prisma.$transaction(async (tx) => {
-      // 1. Fetch oldest unallocated item for the product (FIFO)
-      const item = await tx.inventoryItem.findFirst({
-        where: { productId: order.productId, isAllocated: false },
-        orderBy: { createdAt: "asc" },
-      });
+      let anyOutOfStock = false;
+      const updatedProductIds: string[] = [];
 
-      if (!item) {
-        // If out of stock after payment, flag it
-        await tx.order.update({
-          where: { id: orderId },
-          data: {
-            status: "PAID",
-            adminMessage: "Payment confirmed but item went out of stock. Contact admin.",
-          },
-        });
-        return;
-      }
-
-      // 2. Mark item as allocated
-      const claimed = await tx.inventoryItem.updateMany({
-        where: { id: item.id, isAllocated: false },
-        data: { isAllocated: true, allocatedAt: new Date() },
-      });
-      if (claimed.count !== 1) {
-        throw new Error("Inventory item is no longer available. Refresh and try again.");
-      }
-
-      // 3. Recalculate stock state
-      const unallocatedCount = await tx.inventoryItem.count({
-        where: { productId: order.productId, isAllocated: false },
-      });
-
-      await tx.product.update({
-        where: { id: order.productId },
-        data: { stockState: getStockState(unallocatedCount) },
-      });
-
-      // 4. Update order to COOLDOWN_ACTIVE
       const cooldownSeconds = 30;
       const cooldownEndAt = new Date(Date.now() + cooldownSeconds * 1000);
 
+      for (const orderItem of order.items) {
+        // 1. Fetch oldest unallocated item for the product (FIFO)
+        const inventoryItem = await tx.inventoryItem.findFirst({
+          where: { productId: orderItem.productId, isAllocated: false },
+          orderBy: { createdAt: "asc" },
+        });
+
+        if (!inventoryItem) {
+          anyOutOfStock = true;
+          await tx.orderItem.update({
+            where: { id: orderItem.id },
+            data: {
+              status: "PAID",
+              adminMessage: "Payment confirmed but this item went out of stock. Contact admin.",
+            },
+          });
+        } else {
+          // 2. Mark item as allocated
+          const claimed = await tx.inventoryItem.updateMany({
+            where: { id: inventoryItem.id, isAllocated: false },
+            data: { isAllocated: true, allocatedAt: new Date() },
+          });
+          if (claimed.count !== 1) {
+            throw new Error(`Inventory item for ${orderItem.product.name} is no longer available. Refresh and try again.`);
+          }
+
+          if (!updatedProductIds.includes(orderItem.productId)) {
+            updatedProductIds.push(orderItem.productId);
+          }
+
+          // 3. Update order item to COOLDOWN_ACTIVE
+          await tx.orderItem.update({
+            where: { id: orderItem.id },
+            data: {
+              inventoryItemId: inventoryItem.id,
+              status: "COOLDOWN_ACTIVE",
+              cooldownEndAt,
+            },
+          });
+        }
+      }
+
+      // 4. Recalculate stock state
+      for (const pid of updatedProductIds) {
+        const unallocatedCount = await tx.inventoryItem.count({
+          where: { productId: pid, isAllocated: false },
+        });
+        await tx.product.update({
+          where: { id: pid },
+          data: { stockState: getStockState(unallocatedCount) },
+        });
+      }
+
+      // 5. Update master order status
       await tx.order.update({
         where: { id: orderId },
         data: {
-          inventoryItemId: item.id,
-          status: "COOLDOWN_ACTIVE",
-          cooldownEndAt,
+          status: anyOutOfStock ? "PAID" : "COOLDOWN_ACTIVE",
         },
       });
     });
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("Confirm payment error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

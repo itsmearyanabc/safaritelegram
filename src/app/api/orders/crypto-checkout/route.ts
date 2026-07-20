@@ -10,9 +10,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { productId, cryptoCurrency } = await req.json();
-    if (!productId || !cryptoCurrency) {
-      return NextResponse.json({ error: "Product ID and crypto currency are required" }, { status: 400 });
+    const { cart, cryptoCurrency } = await req.json();
+    if (!cart || !Array.isArray(cart) || cart.length === 0 || !cryptoCurrency) {
+      return NextResponse.json({ error: "Cart and crypto currency are required" }, { status: 400 });
     }
 
     // Validate crypto currency
@@ -24,19 +24,43 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
+    let totalAmountDue = 0;
+    const orderItemsData = [];
+    let firstProductName = "Multiple Items";
 
-    if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    }
+    // Validate inventory and calculate total price
+    for (let i = 0; i < cart.length; i++) {
+      const { productId, quantity } = cart[i];
+      
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+      });
 
-    if (product.stockState === "OUT_OF_STOCK") {
-      return NextResponse.json({ error: "Product is out of stock" }, { status: 400 });
-    }
-    if (product.currency !== "USD") {
-      return NextResponse.json({ error: "Direct crypto checkout is currently available for USD-priced products only." }, { status: 400 });
+      if (!product) {
+        return NextResponse.json({ error: `Product not found: ${productId}` }, { status: 404 });
+      }
+
+      if (i === 0) firstProductName = product.name;
+
+      // Check stock availability
+      const unallocatedCount = await prisma.inventoryItem.count({
+        where: { productId, isAllocated: false },
+      });
+
+      if (unallocatedCount < quantity) {
+        return NextResponse.json({ error: `Not enough stock for ${product.name}. Requested: ${quantity}, Available: ${unallocatedCount}` }, { status: 400 });
+      }
+
+      const itemCost = Number(product.price);
+      totalAmountDue += itemCost * quantity;
+
+      for (let j = 0; j < quantity; j++) {
+        orderItemsData.push({
+          productId: product.id,
+          priceAtPurchase: product.price,
+          status: "PENDING_PAYMENT",
+        });
+      }
     }
 
     // Fetch the admin's wallet address for this currency
@@ -54,23 +78,21 @@ export async function POST(req: Request) {
     });
     const networkFee = feeSetting ? parseFloat(feeSetting.value) : 0;
 
-    // Create order with PENDING_PAYMENT status
+    // Create master order with PENDING_PAYMENT status
     const order = await prisma.order.create({
       data: {
         userId: session.userId,
-        productId: product.id,
-        amountPaid: product.price,
-        currency: product.currency,
+        totalAmount: totalAmountDue,
         status: "PENDING_PAYMENT",
         orderSource: "WEBSITE",
         paymentMethod: "DIRECT_CRYPTO",
         cryptoCurrency: cryptoCurrency,
         networkFee: networkFee,
-        cryptoAmountDue: (Number(product.price) + networkFee).toFixed(2),
+        cryptoAmountDue: (totalAmountDue + networkFee).toFixed(2),
         paymentWalletAddress: walletSetting.value,
-      },
-      include: {
-        product: true,
+        items: {
+          create: orderItemsData,
+        },
       },
     });
 
@@ -78,14 +100,14 @@ export async function POST(req: Request) {
       success: true,
       order: {
         id: order.id,
-        productName: order.product.name,
-        amountPaid: order.amountPaid,
+        productName: cart.length > 1 ? `${firstProductName} and ${cart.length - 1} more` : firstProductName,
+        totalAmount: order.totalAmount,
         currency: order.currency,
         cryptoCurrency: cryptoCurrency,
         cryptoName: cryptoInfo.name,
         network: cryptoInfo.network,
         networkFee: networkFee,
-        totalDue: Number(product.price) + networkFee,
+        totalDue: totalAmountDue + networkFee,
         walletAddress: walletSetting.value,
         status: order.status,
       },
